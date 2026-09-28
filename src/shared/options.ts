@@ -43,8 +43,8 @@ export const DEFAULT_FEATURES: Readonly<FeatureOptions> = {
 export const FEATURE_KEYS = ['mirror', 'rgbShift', 'timeJump', 'md5Change', 'maskInvert', 'frameSampling'] as const
 export type FeatureKey = (typeof FEATURE_KEYS)[number]
 
-export const OPACITY_ERROR = '蒙版倒置的不透明度需要是大于 0、不超过 1 的数字，例如 0.03'
-export const INTERVAL_ERROR = '视频抽帧的间隔需要是不小于 2 的整数，例如 5'
+/** 功能选项的问题：没有开启任何功能、不透明度不对、抽帧间隔不对。说明文字在界面文字的 problems 中 */
+export type FeatureProblem = 'noFeatures' | 'opacity' | 'interval'
 
 /** 解析输入框中的不透明度，格式不对时返回 NaN */
 export function parseOpacity(text: string): number {
@@ -68,11 +68,11 @@ export function countSelected(features: FeatureOptions): number {
   return FEATURE_KEYS.filter((key) => features[key]).length
 }
 
-/** 检查功能选项，返回第一个问题的说明；没有问题时返回 null */
-export function validateFeatures(features: FeatureOptions): string | null {
-  if (countSelected(features) === 0) return '还没有开启任何功能'
-  if (features.maskInvert && !isValidOpacity(features.maskOpacity)) return OPACITY_ERROR
-  if (features.frameSampling && !isValidInterval(features.samplingInterval)) return INTERVAL_ERROR
+/** 检查功能选项，返回第一个问题；没有问题时返回 null */
+export function validateFeatures(features: FeatureOptions): FeatureProblem | null {
+  if (countSelected(features) === 0) return 'noFeatures'
+  if (features.maskInvert && !isValidOpacity(features.maskOpacity)) return 'opacity'
+  if (features.frameSampling && !isValidInterval(features.samplingInterval)) return 'interval'
   return null
 }
 

@@ -1,5 +1,6 @@
 import { Check, Copy, Info, Minus, Plus } from 'lucide-react'
 import { useEffect, useId, useRef, useState, type ButtonHTMLAttributes, type ReactNode } from 'react'
+import { useI18n } from '../lib/i18n'
 
 export function cx(...names: Array<string | false | null | undefined>): string {
   return names.filter(Boolean).join(' ')
@@ -97,6 +98,7 @@ interface StepperProps {
 
 /** 带加减按钮的数字输入框。输入框里的内容原样保留，方便用户输入到一半时不被改写 */
 export function Stepper({ value, onChange, step, min, max, decimals, label, invalid, disabled }: StepperProps) {
+  const { t } = useI18n()
   const nudge = (direction: 1 | -1) => {
     const current = Number(value)
     const base = Number.isFinite(current) ? current : min
@@ -105,7 +107,7 @@ export function Stepper({ value, onChange, step, min, max, decimals, label, inva
   }
   return (
     <div className={cx('stepper', invalid && 'is-invalid')} onClick={(event) => event.stopPropagation()}>
-      <button type="button" aria-label={`减小${label}`} disabled={disabled} onClick={() => nudge(-1)}>
+      <button type="button" aria-label={t.ui.decrease(label)} disabled={disabled} onClick={() => nudge(-1)}>
         <Minus size={13} />
       </button>
       <input
@@ -117,7 +119,7 @@ export function Stepper({ value, onChange, step, min, max, decimals, label, inva
         spellCheck={false}
         onChange={(event) => onChange(event.target.value)}
       />
-      <button type="button" aria-label={`增大${label}`} disabled={disabled} onClick={() => nudge(1)}>
+      <button type="button" aria-label={t.ui.increase(label)} disabled={disabled} onClick={() => nudge(1)}>
         <Plus size={13} />
       </button>
     </div>
@@ -126,6 +128,7 @@ export function Stepper({ value, onChange, step, min, max, decimals, label, inva
 
 /** 复制按钮：复制后短暂显示对勾 */
 export function CopyButton({ text, label, onCopy }: { text: string; label: string; onCopy: (text: string) => void }) {
+  const { t } = useI18n()
   const [copied, setCopied] = useState(false)
   useEffect(() => {
     if (!copied) return
@@ -134,7 +137,7 @@ export function CopyButton({ text, label, onCopy }: { text: string; label: strin
   }, [copied])
   return (
     <IconButton
-      label={copied ? '已复制' : label}
+      label={copied ? t.ui.copied : label}
       className={cx('copy-btn', copied && 'is-done')}
       onClick={(event) => {
         event.stopPropagation()

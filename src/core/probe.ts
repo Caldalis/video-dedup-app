@@ -1,6 +1,5 @@
 import type { ChildProcess } from 'node:child_process'
 import type { AudioStreamInfo, MediaInfo, VideoStreamInfo } from '../shared/types'
-import { ProcessingError } from './errors'
 import { runCapture } from './ffmpeg'
 
 /** 把 FFmpeg 输出的 HH:MM:SS.mmm 转换为秒数，无法解析时返回 -1 */
@@ -73,24 +72,23 @@ export function parseMediaInfo(stderr: string): MediaInfo {
   }
   if (!stderr.includes('Input #0')) {
     // 文件没能打开（不是视频文件、已损坏等），最后一行是原因，例如
-    // "Error opening input files: Invalid data found when processing input"
+    // "Error opening input files: Invalid data found when processing input"。
+    // FFmpeg 什么都没输出时留空，调用方按“没有视频画面”处理
     const lines = stderr.split(/\r?\n/).map((line) => line.trim()).filter(Boolean)
-    info.error = lines.at(-1) ?? '未知错误'
+    info.error = lines.at(-1) ?? ''
   }
   return info
 }
 
-/** 用 FFmpeg 读取视频时长，以及是否包含画面和声音 */
+/**
+ * 用 FFmpeg 读取视频时长，以及是否包含画面和声音。
+ * 无法启动 FFmpeg 时抛出系统给出的错误，由调用方按界面语言说明
+ */
 export async function probeMedia(
   ffmpegPath: string,
   file: string,
   onSpawn?: (child: ChildProcess) => void,
 ): Promise<MediaInfo> {
-  let result
-  try {
-    result = await runCapture(ffmpegPath, ['-hide_banner', '-nostdin', '-i', file], { timeoutMs: 60_000, onSpawn })
-  } catch (error) {
-    throw new ProcessingError(`无法运行 FFmpeg：${(error as Error).message}`, { cause: error })
-  }
+  const result = await runCapture(ffmpegPath, ['-hide_banner', '-nostdin', '-i', file], { timeoutMs: 60_000, onSpawn })
   return parseMediaInfo(result.stderr)
 }

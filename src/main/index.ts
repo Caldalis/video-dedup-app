@@ -25,7 +25,6 @@ if (!app.requestSingleInstanceLock()) {
   })
 
   app.whenReady().then(() => {
-    app.setAboutPanelOptions({ applicationName: app.name, applicationVersion: app.getVersion() })
     loadSettings()
     // 界面不需要摄像头、通知等任何权限
     session.defaultSession.setPermissionRequestHandler((_webContents, _permission, callback) => callback(false))

@@ -1,21 +1,23 @@
 import { Upload } from 'lucide-react'
 import { useEffect, useEffectEvent, useRef, useState } from 'react'
+import { messages } from '../../shared/i18n'
+import type { Language } from '../../shared/i18n/language'
 import type { AppInfo, JobEvent, JobResult, Md5Slot, MenuCommand, ThemeMode } from '../../shared/ipc'
 import { validateFeatures } from '../../shared/options'
 import { FeatureCard, defaultDraft, parseDraft, type FeatureDraft } from './components/FeatureCard'
-import { FileCard, type HashState, type InputState } from './components/FileCard'
+import { FileCard, inputErrorText, type HashState, type InputError, type InputState } from './components/FileCard'
 import { Header } from './components/Header'
 import { LogCard } from './components/LogCard'
 import { ProcessCard, type JobState } from './components/ProcessCard'
 import { cx } from './components/ui'
-import { basename, fileManagerName, formatElapsed } from './lib/format'
+import { basename, formatElapsed } from './lib/format'
 import { useLog, useToasts } from './lib/hooks'
+import { I18nContext } from './lib/i18n'
 
 const api = window.api
 
-const SOURCE_NAMES = { bundled: '随程序提供', system: '系统中安装', env: '环境变量 VIDEO_DEDUP_FFMPEG 指定' } as const
-
-export function App() {
+export function App({ initialLanguage }: { initialLanguage: Language }) {
+  const [language, setLanguage] = useState(initialLanguage)
   const [info, setInfo] = useState<AppInfo | null>(null)
   const [theme, setTheme] = useState<ThemeMode>('system')
   const [input, setInput] = useState<InputState | null>(null)
@@ -29,13 +31,20 @@ export function App() {
   const log = useLog()
   const { toasts, show: toast } = useToasts()
 
+  // 界面文字。已经写入的日志保持写入时的语言
+  const t = messages(language)
   const busy = job.phase === 'starting' || job.phase === 'running'
   const features = parseDraft(draft)
+  const featureProblem = validateFeatures(features)
   const problem = !input
-    ? '还没有选择视频文件'
+    ? t.problems.noInput
     : input.loading
-      ? '正在读取视频信息…'
-      : (input.error ?? validateFeatures(features))
+      ? t.problems.loading
+      : input.error
+        ? inputErrorText(input.error, t)
+        : featureProblem
+          ? t.problems[featureProblem]
+          : null
 
   // 每次开始读取文件信息、计算 MD5 时加一，用来丢弃已经过期的结果（期间又换了文件或清空了界面）
   const tokens = useRef({ inspect: 0, input: 0, output: 0 })
@@ -47,11 +56,11 @@ export function App() {
   function logFFmpeg(appInfo: AppInfo) {
     const ffmpeg = appInfo.ffmpeg
     if (!ffmpeg) {
-      log.append(appInfo.ffmpegMissingMessage, 'error')
+      log.append(t.ffmpeg.missing(appInfo.platform, appInfo.packaged), 'error')
       return
     }
-    log.append(`FFmpeg ${ffmpeg.version ?? '（版本未知）'}：${ffmpeg.path}（${SOURCE_NAMES[ffmpeg.source]}）`)
-    if (ffmpeg.warning) log.append(ffmpeg.warning, 'warn')
+    log.append(t.app.ffmpegFound(ffmpeg.version, ffmpeg.path, ffmpeg.source))
+    if (!ffmpeg.supported) log.append(t.ffmpeg.outdated(ffmpeg.version), 'warn')
   }
 
   async function startMd5(slot: Md5Slot, path: string) {
@@ -60,13 +69,12 @@ export function App() {
     set({ status: 'computing' })
     const result = await api.md5(path, slot)
     if (token !== tokens.current[slot]) return
-    const label = slot === 'input' ? '原文件' : '输出文件'
     if (result.status === 'ok') {
       set({ status: 'done', value: result.value })
-      log.append(`${label} MD5：${result.value}`)
+      log.append(t.app.md5Done(slot, result.value))
     } else if (result.status === 'error') {
       set({ status: 'error', message: result.message })
-      log.append(`无法计算${label}的 MD5：${result.message}`, 'error')
+      log.append(t.app.md5Failed(slot, result.message), 'error')
     }
   }
 
@@ -79,7 +87,7 @@ export function App() {
   async function selectInput(path: string) {
     if (busy) return
     const token = ++tokens.current.inspect
-    log.append(`打开视频：${path}`)
+    log.append(t.app.opened(path))
     setInput({ path, name: basename(path), loading: true, file: null, error: null })
     setOutput({ path: '', confirmed: false })
     setJob({ phase: 'idle' })
@@ -89,17 +97,18 @@ export function App() {
     const result = await api.inspectInput(path)
     if (token !== tokens.current.inspect) return
     if (!result.ok) {
-      setInput({ path, name: basename(path), loading: false, file: null, error: result.message })
-      log.append(result.message, 'error')
+      const error: InputError = { kind: result.reason, detail: result.detail }
+      setInput({ path, name: basename(path), loading: false, file: null, error })
+      log.append(inputErrorText(error, t), 'error')
       return
     }
     const media = result.file.media
-    const error =
-      media && !media.hasVideo ? (media.error ? `无法读取这个文件：${media.error}` : '这个文件中没有视频画面') : null
+    const error: InputError | null =
+      media && !media.hasVideo ? (media.error ? { kind: 'cannotRead', detail: media.error } : { kind: 'noVideo' }) : null
     setInput({ path, name: result.file.name, loading: false, file: result.file, error })
     // 每次选择文件都重新生成默认输出路径，免得沿用上一个文件的输出路径，覆盖上一次的处理结果
     setOutput({ path: result.file.defaultOutput, confirmed: false })
-    if (error) log.append(error, 'error')
+    if (error) log.append(inputErrorText(error, t), 'error')
   }
 
   async function chooseInput() {
@@ -113,7 +122,7 @@ export function App() {
     const path = await api.chooseOutput(output.path || input.file.defaultOutput)
     if (!path) return
     setOutput({ path, confirmed: true })
-    log.append(`输出位置改为：${path}`)
+    log.append(t.app.outputChanged(path))
   }
 
   function removeInput() {
@@ -131,7 +140,7 @@ export function App() {
     removeInput()
     setDraft(defaultDraft())
     log.clear()
-    log.append('已清空，参数恢复为默认值')
+    log.append(t.app.cleared)
   }
 
   async function start() {
@@ -150,7 +159,7 @@ export function App() {
       }
       setJob({ phase: 'starting' })
       resetMd5('output')
-      log.append('开始处理')
+      log.append(t.app.starting)
       const response = await api.startJob({
         options: { ...features, inputPath: input.path, outputPath: output.path },
         overwriteConfirmed: output.confirmed,
@@ -162,7 +171,7 @@ export function App() {
       }
       setJob((current) => (current.phase === 'starting' ? { phase: 'idle' } : current))
       if (response.status === 'invalid') {
-        log.append(`无法开始：${response.message}`, 'error')
+        log.append(t.app.cannotStart(response.message), 'error')
         toast(response.message, 'error')
       }
     } finally {
@@ -175,16 +184,16 @@ export function App() {
     switch (result.status) {
       case 'ok':
         setJob({ phase: 'done', outputPath: result.outputPath, seconds: result.seconds })
-        log.append(`处理完成，用时 ${formatElapsed(result.seconds)}`, 'success')
+        log.append(t.app.finished(formatElapsed(result.seconds, t.units)), 'success')
         void startMd5('output', result.outputPath)
         break
       case 'failed':
         setJob({ phase: 'failed', message: result.message })
-        log.append(`处理失败：${result.message}`, 'error')
+        log.append(t.app.failed(result.message), 'error')
         break
       case 'cancelled':
         setJob({ phase: 'cancelled' })
-        log.append('已取消处理，未生成输出文件')
+        log.append(t.app.cancelled)
         break
     }
   }
@@ -193,26 +202,34 @@ export function App() {
     if (job.phase !== 'running' || job.cancelling) return
     if (!(await api.cancelJob())) return
     setJob((current) => (current.phase === 'running' ? { ...current, cancelling: true } : current))
-    log.append('正在取消…')
+    log.append(t.app.cancelling)
   }
 
   async function copy(text: string) {
     try {
       await api.copyText(text)
-      toast('已复制到剪贴板', 'success')
+      toast(t.app.copied, 'success')
     } catch (error) {
-      toast(`复制失败：${(error as Error).message}`, 'error')
+      toast(t.app.copyFailed((error as Error).message), 'error')
     }
   }
 
   async function openFile(path: string) {
     const error = await api.openFile(path)
-    if (error) toast(`无法打开文件：${error}`, 'error')
+    if (error) toast(t.app.openFailed(error), 'error')
   }
 
   function changeTheme(mode: ThemeMode) {
     setTheme(mode)
     void api.setTheme(mode)
+  }
+
+  function changeLanguage(next: Language) {
+    if (next === language) return
+    setLanguage(next)
+    document.documentElement.lang = next
+    document.title = messages(next).appName
+    void api.setLanguage(next)
   }
 
   // 以下函数由 effect 注册的监听器调用。Effect Event 总能读到最新的状态，effect 不用因为状态变化而重新注册
@@ -285,7 +302,7 @@ export function App() {
       const file = event.dataTransfer?.files[0]
       if (!file) return
       if (busy) {
-        toast('正在处理视频，暂时不能更换文件', 'error')
+        toast(t.app.busy, 'error')
         return
       }
       const path = api.pathForFile(file)
@@ -322,63 +339,65 @@ export function App() {
   }, [])
 
   return (
-    <div className={cx('app', info?.platform === 'darwin' && 'is-mac')}>
-      <Header info={info} theme={theme} onThemeChange={changeTheme} />
-      <main className="layout">
-        <div className="column column-main">
-          <FileCard
-            input={input}
-            inputMd5={inputMd5}
-            output={output.path}
-            busy={busy}
-            onChooseInput={() => void chooseInput()}
-            onChooseOutput={() => void chooseOutput()}
-            onRemove={removeInput}
-            onCopy={(text) => void copy(text)}
-          />
-          <FeatureCard draft={draft} onChange={setDraft} disabled={busy} />
-        </div>
-        <div className="column column-side">
-          <ProcessCard
-            job={job}
-            problem={problem}
-            hasInput={input !== null}
-            features={features}
-            outputPath={output.path}
-            duration={input?.file?.media?.duration ?? null}
-            outputMd5={outputMd5}
-            platformFileManager={fileManagerName(info?.platform)}
-            onStart={() => void start()}
-            onCancel={() => void cancel()}
-            onClear={clearAll}
-            onShowInFolder={(path) => void api.showInFolder(path)}
-            onOpen={(path) => void openFile(path)}
-            onCopy={(text) => void copy(text)}
-          />
-          <LogCard
-            entries={log.entries}
-            onCopy={() => void copy(log.entries.map((entry) => `[${entry.time}] ${entry.message}`).join('\n'))}
-            onClear={log.clear}
-          />
-        </div>
-      </main>
-
-      {dragging && (
-        <div className={cx('drop-overlay', busy && 'is-blocked')}>
-          <div className="drop-overlay-inner">
-            <Upload size={28} />
-            <span>{busy ? '正在处理视频，暂时不能更换文件' : '松开鼠标，选择这个视频'}</span>
+    <I18nContext value={{ language, t }}>
+      <div className={cx('app', info?.platform === 'darwin' && 'is-mac')}>
+        <Header info={info} theme={theme} onThemeChange={changeTheme} language={language} onLanguageChange={changeLanguage} />
+        <main className="layout">
+          <div className="column column-main">
+            <FileCard
+              input={input}
+              inputMd5={inputMd5}
+              output={output.path}
+              busy={busy}
+              onChooseInput={() => void chooseInput()}
+              onChooseOutput={() => void chooseOutput()}
+              onRemove={removeInput}
+              onCopy={(text) => void copy(text)}
+            />
+            <FeatureCard draft={draft} onChange={setDraft} disabled={busy} />
           </div>
-        </div>
-      )}
-
-      <div className="toasts" aria-live="polite">
-        {toasts.map((item) => (
-          <div key={item.id} className={cx('toast', `is-${item.tone}`)}>
-            {item.message}
+          <div className="column column-side">
+            <ProcessCard
+              job={job}
+              problem={problem}
+              hasInput={input !== null}
+              features={features}
+              outputPath={output.path}
+              duration={input?.file?.media?.duration ?? null}
+              outputMd5={outputMd5}
+              platform={info?.platform}
+              onStart={() => void start()}
+              onCancel={() => void cancel()}
+              onClear={clearAll}
+              onShowInFolder={(path) => void api.showInFolder(path)}
+              onOpen={(path) => void openFile(path)}
+              onCopy={(text) => void copy(text)}
+            />
+            <LogCard
+              entries={log.entries}
+              onCopy={() => void copy(log.entries.map((entry) => `[${entry.time}] ${entry.message}`).join('\n'))}
+              onClear={log.clear}
+            />
           </div>
-        ))}
+        </main>
+
+        {dragging && (
+          <div className={cx('drop-overlay', busy && 'is-blocked')}>
+            <div className="drop-overlay-inner">
+              <Upload size={28} />
+              <span>{busy ? t.app.busy : t.app.dropHere}</span>
+            </div>
+          </div>
+        )}
+
+        <div className="toasts" aria-live="polite">
+          {toasts.map((item) => (
+            <div key={item.id} className={cx('toast', `is-${item.tone}`)}>
+              {item.message}
+            </div>
+          ))}
+        </div>
       </div>
-    </div>
+    </I18nContext>
   )
 }

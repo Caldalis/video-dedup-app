@@ -1,6 +1,7 @@
 import { Copy, Eraser, ScrollText } from 'lucide-react'
 import { useLayoutEffect, useRef } from 'react'
 import type { LogEntry } from '../lib/hooks'
+import { useI18n } from '../lib/i18n'
 import { Card, IconButton, cx } from './ui'
 
 interface LogCardProps {
@@ -10,6 +11,7 @@ interface LogCardProps {
 }
 
 export function LogCard({ entries, onCopy, onClear }: LogCardProps) {
+  const { t } = useI18n()
   const listRef = useRef<HTMLDivElement>(null)
   // 停在底部时自动滚动到最新的日志；往上翻看时不打扰
   const stickToBottom = useRef(true)
@@ -21,16 +23,16 @@ export function LogCard({ entries, onCopy, onClear }: LogCardProps) {
 
   return (
     <Card
-      title="处理日志"
+      title={t.log.title}
       icon={<ScrollText size={16} />}
       className="log-card"
       actions={
         <>
           <span className="badge">{entries.length}</span>
-          <IconButton label="复制全部日志" onClick={onCopy} disabled={entries.length === 0}>
+          <IconButton label={t.log.copyAll} onClick={onCopy} disabled={entries.length === 0}>
             <Copy size={14} />
           </IconButton>
-          <IconButton label="清空日志" onClick={onClear} disabled={entries.length === 0}>
+          <IconButton label={t.log.clear} onClick={onClear} disabled={entries.length === 0}>
             <Eraser size={14} />
           </IconButton>
         </>
@@ -47,7 +49,7 @@ export function LogCard({ entries, onCopy, onClear }: LogCardProps) {
         }}
       >
         {entries.length === 0 ? (
-          <div className="log-empty">暂无日志</div>
+          <div className="log-empty">{t.log.empty}</div>
         ) : (
           entries.map((entry) => (
             <div key={entry.id} className={cx('log-line', `is-${entry.level}`)}>

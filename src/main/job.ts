@@ -1,4 +1,4 @@
-import { BrowserWindow, dialog, type WebContents } from 'electron'
+import { app, BrowserWindow, dialog, type WebContents } from 'electron'
 import { statSync } from 'node:fs'
 import path from 'node:path'
 import { ProcessingCancelled } from '../core/errors'
@@ -6,7 +6,8 @@ import { isSameFile } from '../core/files'
 import { VideoProcessor } from '../core/processor'
 import { IPC, type JobEvent, type JobResult, type StartRequest, type StartResponse } from '../shared/ipc'
 import { DEFAULT_FEATURES, validateFeatures, type ProcessingOptions } from '../shared/options'
-import { ffmpegMissingMessage, resolveFFmpeg } from './ffmpeg'
+import { resolveFFmpeg } from './ffmpeg'
+import { t } from './settings'
 
 function isFile(file: string): boolean {
   try {
@@ -47,15 +48,17 @@ function readOptions(raw: unknown): ProcessingOptions {
   }
 }
 
-/** 开始处理前的检查，返回第一个问题的说明；没有问题时返回 null */
+/** 开始处理前的检查，返回第一个问题的说明（当前界面语言）；没有问题时返回 null */
 function checkOptions(options: ProcessingOptions): string | null {
-  if (!options.inputPath) return '还没有选择视频文件'
-  if (!isFile(options.inputPath)) return `找不到输入文件：\n${options.inputPath}`
-  if (!options.outputPath) return '还没有设置输出位置'
-  if (isSameFile(options.inputPath, options.outputPath)) return '输出文件不能与输入文件相同，请选择其他输出路径'
+  const text = t()
+  if (!options.inputPath) return text.errors.noInput
+  if (!isFile(options.inputPath)) return text.errors.inputMissing(options.inputPath)
+  if (!options.outputPath) return text.errors.noOutput
+  if (isSameFile(options.inputPath, options.outputPath)) return text.errors.sameFile
   const outputDir = path.dirname(path.resolve(options.outputPath))
-  if (!isDirectory(outputDir)) return `输出文件夹不存在：\n${outputDir}`
-  return validateFeatures(options)
+  if (!isDirectory(outputDir)) return text.errors.outputDirMissing(outputDir)
+  const problem = validateFeatures(options)
+  return problem ? text.problems[problem] : null
 }
 
 /** 管理当前的处理任务：同一时间只处理一个视频 */
@@ -71,7 +74,7 @@ export class JobManager {
 
   /** 检查参数并开始处理。开始后立即返回，处理结果通过 finished 事件发给界面 */
   async start(request: StartRequest, sender: WebContents): Promise<StartResponse> {
-    if (this.processor || this.preparing) return { status: 'invalid', message: '正在处理其他视频，请等待处理完成' }
+    if (this.processor || this.preparing) return { status: 'invalid', message: t().errors.busy }
     this.preparing = true
     try {
       return await this.prepareAndStart(request, sender)
@@ -85,17 +88,19 @@ export class JobManager {
     const problem = checkOptions(options)
     if (problem) return { status: 'invalid', message: problem }
     const ffmpeg = await resolveFFmpeg()
-    if (!ffmpeg) return { status: 'invalid', message: ffmpegMissingMessage() }
+    if (!ffmpeg) return { status: 'invalid', message: t().ffmpeg.missing(process.platform, app.isPackaged) }
 
     // 输出文件已存在且没有在“另存为”对话框中确认过时，先询问是否覆盖
     if (isFile(options.outputPath) && request.overwriteConfirmed !== true) {
       const window = BrowserWindow.fromWebContents(sender)
+      const text = t()
       const box = {
         type: 'question' as const,
-        buttons: ['覆盖', '取消'],
+        title: text.appName,
+        buttons: [text.dialogs.overwrite.confirm, text.dialogs.overwrite.cancel],
         defaultId: 1,
         cancelId: 1,
-        message: '输出文件已存在，是否覆盖？',
+        message: text.dialogs.overwrite.message,
         detail: options.outputPath,
       }
       const { response } = window ? await dialog.showMessageBox(window, box) : await dialog.showMessageBox(box)
@@ -105,11 +110,16 @@ export class JobManager {
     const send = (event: JobEvent) => {
       if (!sender.isDestroyed()) sender.send(IPC.jobEvent, event)
     }
-    const processor = new VideoProcessor(ffmpeg.path, {
-      log: (message, kind) => send({ type: 'log', message, kind }),
-      progress: (progress) => send({ type: 'progress', progress }),
-      stage: (stage) => send({ type: 'stage', stage }),
-    })
+    // 日志和错误信息使用开始处理时的界面语言
+    const processor = new VideoProcessor(
+      ffmpeg.path,
+      {
+        log: (message, kind) => send({ type: 'log', message, kind }),
+        progress: (progress) => send({ type: 'progress', progress }),
+        stage: (stage) => send({ type: 'stage', stage }),
+      },
+      t().processor,
+    )
     this.processor = processor
     void this.run(processor, options).then((result) => send({ type: 'finished', result }))
     return { status: 'started' }

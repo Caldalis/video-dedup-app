@@ -35,24 +35,6 @@ async function locate(): Promise<FFmpegInfo | null> {
   } catch {
     // 读不出版本号时仍然尝试使用
   }
-  return {
-    ...location,
-    version,
-    warning: isVersionSupported(version) ? null : `FFmpeg ${version} 版本过旧，本工具需要 5.1 及以上版本`,
-  }
-}
-
-/** 找不到 FFmpeg 时的提示 */
-export function ffmpegMissingMessage(): string {
-  const after = '装好后不用重启程序，直接开始处理即可。'
-  if (app.isPackaged) {
-    return `未找到 FFmpeg，暂时无法处理视频。安装包中的 FFmpeg 可能被删除或被杀毒软件拦截，请重新安装本工具，或自行安装 FFmpeg。${after}`
-  }
-  const install =
-    process.platform === 'darwin'
-      ? '或在“终端”中执行 brew install ffmpeg 安装'
-      : process.platform === 'win32'
-        ? '或安装 FFmpeg 并把 ffmpeg.exe 所在的目录加入 PATH'
-        : '或用系统的包管理器安装（例如 sudo apt install ffmpeg）'
-  return `未找到 FFmpeg，暂时无法处理视频。请重新执行 pnpm install 下载 FFmpeg，${install}。${after}`
+  // 版本过旧的提示由界面按当前语言生成，这里只记下是否支持
+  return { ...location, version, supported: isVersionSupported(version) }
 }

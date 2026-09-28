@@ -1,6 +1,5 @@
 import { Blend, Contrast, FingerprintPattern, RotateCcw, Scissors, SlidersHorizontal, SquareSplitHorizontal, Timer } from 'lucide-react'
 import type { ReactNode } from 'react'
-import { FEATURES } from '../../../shared/features'
 import {
   DEFAULT_FEATURES,
   FEATURE_KEYS,
@@ -12,6 +11,7 @@ import {
   type FeatureKey,
   type FeatureOptions,
 } from '../../../shared/options'
+import { useI18n } from '../lib/i18n'
 import { Button, Card, InfoPopover, Stepper, Switch, cx } from './ui'
 
 /** 界面上的功能选项：两个数值保留输入框中的原始文字 */
@@ -48,6 +48,8 @@ interface FeatureCardProps {
 }
 
 export function FeatureCard({ draft, onChange, disabled }: FeatureCardProps) {
+  const { t } = useI18n()
+  const text = t.features
   const selected = FEATURE_KEYS.filter((key) => draft[key]).length
   const update = (patch: Partial<FeatureDraft>) => onChange({ ...draft, ...patch })
   const opacityValid = isValidOpacity(parseOpacity(draft.maskOpacity))
@@ -58,9 +60,9 @@ export function FeatureCard({ draft, onChange, disabled }: FeatureCardProps) {
     maskInvert: (
       <>
         <div className="param">
-          <span className="param-label">不透明度</span>
+          <span className="param-label">{text.opacity}</span>
           <Stepper
-            label="不透明度"
+            label={text.opacity}
             value={draft.maskOpacity}
             onChange={(maskOpacity) => update({ maskOpacity })}
             step={0.01}
@@ -72,16 +74,16 @@ export function FeatureCard({ draft, onChange, disabled }: FeatureCardProps) {
           />
         </div>
         <p className={cx('param-hint', !opacityValid && 'text-danger')}>
-          {opacityValid ? '0~1 之间，值越大画面越灰' : '需要大于 0、不超过 1'}
+          {opacityValid ? text.opacityHint : text.opacityInvalid}
         </p>
       </>
     ),
     frameSampling: (
       <>
         <div className="param">
-          <span className="param-label">间隔</span>
+          <span className="param-label">{text.interval}</span>
           <Stepper
-            label="抽帧间隔"
+            label={text.intervalLabel}
             value={draft.samplingInterval}
             onChange={(samplingInterval) => update({ samplingInterval })}
             step={1}
@@ -91,7 +93,7 @@ export function FeatureCard({ draft, onChange, disabled }: FeatureCardProps) {
             invalid={!intervalValid}
             disabled={disabled}
           />
-          <span className="param-label">帧</span>
+          <span className="param-label">{text.frames}</span>
           <label className="check" onClick={(event) => event.stopPropagation()}>
             <input
               type="checkbox"
@@ -99,15 +101,15 @@ export function FeatureCard({ draft, onChange, disabled }: FeatureCardProps) {
               disabled={disabled}
               onChange={(event) => update({ samplingRandom: event.target.checked })}
             />
-            随机间隔
+            {text.randomInterval}
           </label>
         </div>
         <p className={cx('param-hint', !intervalValid && 'text-danger')}>
           {!intervalValid
-            ? '需要是不小于 2 的整数'
+            ? text.intervalInvalid
             : draft.samplingRandom
-              ? `每 ${interval}~${interval + SAMPLING_RANDOM_RANGE - 1} 帧随机抽掉 1 帧`
-              : `每 ${interval} 帧抽掉 1 帧`}
+              ? text.samplingRandom(interval, interval + SAMPLING_RANDOM_RANGE - 1)
+              : text.samplingFixed(interval)}
         </p>
       </>
     ),
@@ -115,43 +117,44 @@ export function FeatureCard({ draft, onChange, disabled }: FeatureCardProps) {
 
   return (
     <Card
-      title="去重功能"
+      title={text.title}
       icon={<SlidersHorizontal size={16} />}
       actions={
         <>
-          <span className="badge">已选 {selected} 项</span>
+          <span className="badge">{text.selected(selected)}</span>
           <Button size="sm" variant="ghost" icon={<RotateCcw size={13} />} onClick={() => onChange(defaultDraft())} disabled={disabled}>
-            恢复默认
+            {text.reset}
           </Button>
         </>
       }
     >
       <div className="feature-grid">
-        {FEATURES.map((feature) => {
-          const checked = draft[feature.key]
-          const toggle = () => !disabled && update({ [feature.key]: !checked })
+        {FEATURE_KEYS.map((key) => {
+          const feature = text.items[key]
+          const checked = draft[key]
+          const toggle = () => !disabled && update({ [key]: !checked })
           return (
             <div
-              key={feature.key}
+              key={key}
               className={cx('feature', checked && 'is-on', disabled && 'is-disabled')}
               onClick={toggle}
-              data-feature={feature.key}
+              data-feature={key}
             >
               <div className="feature-head">
-                <div className="feature-icon">{ICONS[feature.key]}</div>
+                <div className="feature-icon">{ICONS[key]}</div>
                 <div className="feature-text">
                   <div className="feature-name">
                     <span className="feature-label">{feature.name}</span>
-                    <InfoPopover label={`${feature.name}说明`}>{feature.detail}</InfoPopover>
+                    <InfoPopover label={text.details(feature.name)}>{feature.detail}</InfoPopover>
                   </div>
                   <div className="feature-summary">{feature.summary}</div>
                 </div>
                 <Switch checked={checked} onChange={toggle} label={feature.name} disabled={disabled} />
               </div>
-              {checked && params[feature.key] && (
+              {checked && params[key] && (
                 // 参数区域里的点击不切换功能
                 <div className="feature-params" onClick={(event) => event.stopPropagation()}>
-                  {params[feature.key]}
+                  {params[key]}
                 </div>
               )}
             </div>

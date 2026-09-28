@@ -25,7 +25,7 @@ export interface MediaInfo {
   video: VideoStreamInfo | null
   /** 第一条音频流 */
   audio: AudioStreamInfo | null
-  /** 无法读取文件时 FFmpeg 给出的原因，能读取时为空字符串 */
+  /** 无法读取文件时 FFmpeg 给出的原因；能读取，或者 FFmpeg 没有给出原因时为空字符串 */
   error: string
 }
 

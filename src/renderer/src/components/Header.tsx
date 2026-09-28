@@ -1,5 +1,7 @@
 import { Monitor, Moon, Sun } from 'lucide-react'
+import { LANGUAGE_NAMES, LANGUAGES, type Language } from '../../../shared/i18n/language'
 import type { AppInfo, ThemeMode } from '../../../shared/ipc'
+import { useI18n } from '../lib/i18n'
 import { InfoPopover, cx } from './ui'
 
 function Logo() {
@@ -18,23 +20,24 @@ function Logo() {
   )
 }
 
-const THEME_OPTIONS: Array<{ mode: ThemeMode; label: string; icon: typeof Sun }> = [
-  { mode: 'light', label: '浅色', icon: Sun },
-  { mode: 'dark', label: '深色', icon: Moon },
-  { mode: 'system', label: '跟随系统', icon: Monitor },
+const THEME_ICONS: Array<{ mode: ThemeMode; icon: typeof Sun }> = [
+  { mode: 'light', icon: Sun },
+  { mode: 'dark', icon: Moon },
+  { mode: 'system', icon: Monitor },
 ]
 
 function ThemeSwitch({ value, onChange }: { value: ThemeMode; onChange: (mode: ThemeMode) => void }) {
+  const { t } = useI18n()
   return (
-    <div className="segmented" role="radiogroup" aria-label="外观">
-      {THEME_OPTIONS.map(({ mode, label, icon: Icon }) => (
+    <div className="segmented" role="radiogroup" aria-label={t.header.theme}>
+      {THEME_ICONS.map(({ mode, icon: Icon }) => (
         <button
           key={mode}
           type="button"
           role="radio"
           aria-checked={value === mode}
-          aria-label={label}
-          title={label}
+          aria-label={t.header.themes[mode]}
+          title={t.header.themes[mode]}
           className={cx('segmented-item', value === mode && 'is-active')}
           onClick={() => onChange(mode)}
         >
@@ -45,29 +48,50 @@ function ThemeSwitch({ value, onChange }: { value: ThemeMode; onChange: (mode: T
   )
 }
 
-const SOURCE_LABELS = { bundled: '内置', system: '系统', env: '环境变量指定' } as const
+/** 语言切换：按钮上的语言名称用这种语言本身书写，界面是哪种语言都一样 */
+function LanguageSwitch({ value, onChange }: { value: Language; onChange: (language: Language) => void }) {
+  const { t } = useI18n()
+  return (
+    <div className="segmented" role="radiogroup" aria-label={t.header.language}>
+      {LANGUAGES.map((language) => (
+        <button
+          key={language}
+          type="button"
+          role="radio"
+          lang={language}
+          aria-checked={value === language}
+          aria-label={LANGUAGE_NAMES[language].full}
+          title={LANGUAGE_NAMES[language].full}
+          className={cx('segmented-item', 'is-text', value === language && 'is-active')}
+          onClick={() => onChange(language)}
+        >
+          {LANGUAGE_NAMES[language].short}
+        </button>
+      ))}
+    </div>
+  )
+}
 
 function FFmpegStatus({ info }: { info: AppInfo | null }) {
+  const { t } = useI18n()
   if (!info) return null
   const ffmpeg = info.ffmpeg
-  const tone = !ffmpeg ? 'error' : ffmpeg.warning ? 'warn' : 'ok'
-  const text = ffmpeg ? `FFmpeg ${ffmpeg.version ?? ''}`.trim() : '未找到 FFmpeg'
+  const tone = !ffmpeg ? 'error' : ffmpeg.supported ? 'ok' : 'warn'
+  const text = ffmpeg ? `FFmpeg ${ffmpeg.version ?? ''}`.trim() : t.header.ffmpegMissing
   return (
     <div className={cx('status-pill', `is-${tone}`)}>
       <span className="status-dot" />
       <span>{text}</span>
-      <InfoPopover label="FFmpeg 详情">
+      <InfoPopover label={t.header.ffmpegDetails}>
         {ffmpeg ? (
           <>
-            <p>
-              版本 {ffmpeg.version ?? '未知'}（{SOURCE_LABELS[ffmpeg.source]}）
-            </p>
+            <p>{t.header.ffmpegVersion(ffmpeg.version, ffmpeg.source)}</p>
             <p className="mono">{ffmpeg.path}</p>
-            {ffmpeg.warning && <p className="text-warn">{ffmpeg.warning}</p>}
-            <p className="muted">可以用环境变量 VIDEO_DEDUP_FFMPEG 指定要使用的 FFmpeg。</p>
+            {!ffmpeg.supported && <p className="text-warn">{t.ffmpeg.outdated(ffmpeg.version)}</p>}
+            <p className="muted">{t.header.ffmpegEnvHint}</p>
           </>
         ) : (
-          <p>{info.ffmpegMissingMessage}</p>
+          <p>{t.ffmpeg.missing(info.platform, info.packaged)}</p>
         )}
       </InfoPopover>
     </div>
@@ -78,20 +102,24 @@ interface HeaderProps {
   info: AppInfo | null
   theme: ThemeMode
   onThemeChange: (mode: ThemeMode) => void
+  language: Language
+  onLanguageChange: (language: Language) => void
 }
 
-export function Header({ info, theme, onThemeChange }: HeaderProps) {
+export function Header({ info, theme, onThemeChange, language, onLanguageChange }: HeaderProps) {
+  const { t } = useI18n()
   return (
     <header className="titlebar">
       <div className="brand">
         <Logo />
-        <div>
-          <h1 className="brand-name">视频去重工具</h1>
-          <div className="brand-sub">Video Dedup · 基于 FFmpeg</div>
+        <div className="brand-text">
+          <h1 className="brand-name">{t.appName}</h1>
+          <div className="brand-sub">{t.appTagline}</div>
         </div>
       </div>
       <div className="titlebar-actions">
         <FFmpegStatus info={info} />
+        <LanguageSwitch value={language} onChange={onLanguageChange} />
         <ThemeSwitch value={theme} onChange={onThemeChange} />
       </div>
     </header>

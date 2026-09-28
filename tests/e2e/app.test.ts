@@ -4,6 +4,7 @@ import path from 'node:path'
 import type { Page } from 'playwright'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import {
+  FILE_BUTTONS,
   answerMessageBoxes,
   answerOpenDialog,
   assertBuilt,
@@ -26,7 +27,17 @@ afterAll(() => {
   if (!process.env.KEEP_E2E_FILES) rmSync(WORK, { recursive: true, force: true })
 })
 
-const launch = (userData = mkdtempSync(path.join(WORK, 'userdata-'))) => launchApp(userData)
+/** lang 是模拟的系统语言，默认中文 */
+const launch = (userData = mkdtempSync(path.join(WORK, 'userdata-')), lang?: string) => launchApp(userData, process.env, lang)
+
+/** 读取用户数据目录中的设置文件，还没有写入时返回 null */
+function savedSettings(userData: string): unknown {
+  try {
+    return JSON.parse(readFileSync(path.join(userData, 'settings.json'), 'utf8'))
+  } catch {
+    return null
+  }
+}
 
 describe('主要流程', () => {
   let ui: Launched
@@ -180,6 +191,96 @@ describe('外观', () => {
     await ui.page.getByRole('radio', { name: '跟随系统' }).click()
     await expect.poll(() => ui.app.evaluate(({ nativeTheme }) => nativeTheme.themeSource)).toBe('system')
     expect(JSON.parse(readFileSync(path.join(userData, 'settings.json'), 'utf8'))).toEqual({ theme: 'system' })
+    await ui.app.close()
+  })
+})
+
+describe('语言', () => {
+  /** 页面上所有文字（包括隐藏的说明弹层）、aria-label 和 title 中含汉字的部分；语言切换按钮上的“中”“中文”除外 */
+  const hanTexts = (page: Page) =>
+    page.evaluate<string[]>(`(() => {
+      const han = /\\p{Script=Han}/u
+      const skip = (element) => element.closest('[lang="zh-CN"]')
+      const found = []
+      const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT)
+      for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+        if (han.test(node.textContent) && !skip(node.parentElement)) found.push(node.textContent)
+      }
+      for (const element of document.querySelectorAll('[aria-label], [title]')) {
+        for (const value of [element.getAttribute('aria-label'), element.getAttribute('title')]) {
+          if (value && han.test(value) && !skip(element)) found.push(value)
+        }
+      }
+      return found
+    })()`)
+
+  it('系统语言是英文时显示英文界面：处理日志、系统对话框也是英文，页面上没有中文', async () => {
+    const userData = mkdtempSync(path.join(WORK, 'userdata-en-'))
+    const ui = await launch(userData, 'en-US')
+    const { app, page } = ui
+    try {
+      expect(await page.title()).toBe('Video Dedup')
+      expect(await page.evaluate<string>('document.documentElement.lang')).toBe('en')
+      expect(await page.getByRole('radio', { name: 'English', exact: true }).getAttribute('aria-checked')).toBe('true')
+      expect(await page.locator('.feature.is-on .feature-label').allTextContents()).toEqual(['Time jump', 'Change MD5'])
+      expect(await page.locator('.status-title').textContent()).toBe('Waiting for a video')
+      expect((await logText(page))[0]).toMatch(/^FFmpeg .+ \((bundled with the app|installed on the system|set by VIDEO_DEDUP_FFMPEG)\)$/)
+
+      const output = path.join(OUT, 'english.mp4')
+      await selectVideo(ui, fixture('in.mkv'), output, FILE_BUTTONS.en)
+      await page.getByRole('switch', { name: 'Mirror', exact: true }).click()
+      await page.getByRole('button', { name: 'Start processing', exact: true }).click()
+      await page.getByText('Processing complete', { exact: true }).waitFor({ timeout: 60_000 })
+      const lines = await logText(page)
+      expect(lines).toContain('Effect: mirror')
+      expect(lines).toContain('Output file saved')
+      expect(lines.some((line) => line.startsWith('Done in '))).toBe(true)
+      expect(await hanTexts(page)).toEqual([])
+
+      // 英文比中文长：在最小窗口和常用宽度下各截一张图，检查排版
+      for (const [width, height] of [
+        [880, 600],
+        [1100, 760],
+        [1280, 820],
+      ]) {
+        await app.evaluate(({ BrowserWindow }, size) => BrowserWindow.getAllWindows()[0].setSize(size[0], size[1]), [width, height])
+        await page.waitForTimeout(300)
+        await page.screenshot({ path: path.join(SHOTS, `english-${width}.png`) })
+      }
+
+      await answerMessageBoxes(app, 1)
+      await page.getByRole('button', { name: 'Process again', exact: true }).click()
+      await expect.poll(() => shownMessageBoxes(app)).toEqual(['The output file already exists. Overwrite it?'])
+      // 没有手动选择过语言，也没有改过外观，不写设置文件
+      expect(existsSync(path.join(userData, 'settings.json'))).toBe(false)
+    } finally {
+      await app.close()
+    }
+  })
+
+  it('切换语言：界面、窗口标题和菜单立即改变，记住选择，重新打开后不再跟随系统', async () => {
+    const userData = mkdtempSync(path.join(WORK, 'userdata-lang-'))
+    const menuLabels = ({ app }: Launched) =>
+      app.evaluate(({ Menu }) => Menu.getApplicationMenu()?.items.slice(1).map((item) => item.label) ?? [])
+
+    let ui = await launch(userData, 'en-US')
+    await ui.page.getByRole('radio', { name: '中文', exact: true }).click()
+    await expect.poll(() => ui.page.title()).toBe('视频去重工具')
+    expect(await ui.page.evaluate<string>('document.documentElement.lang')).toBe('zh-CN')
+    expect(await ui.page.locator('.status-title').textContent()).toBe('等待选择视频')
+    expect(await ui.page.getByRole('button', { name: '开始处理', exact: true }).isDisabled()).toBe(true)
+    if (process.platform === 'darwin') await expect.poll(() => menuLabels(ui)).toEqual(['文件', '编辑', '显示', '窗口'])
+    await expect.poll(() => savedSettings(userData)).toEqual({ theme: 'system', language: 'zh-CN' })
+    await ui.app.close()
+
+    // 保存的选择优先于系统语言
+    ui = await launch(userData, 'en-US')
+    expect(await ui.page.title()).toBe('视频去重工具')
+    expect(await ui.page.getByRole('radio', { name: '中文', exact: true }).getAttribute('aria-checked')).toBe('true')
+    await ui.page.getByRole('radio', { name: 'English', exact: true }).click()
+    await expect.poll(() => ui.page.title()).toBe('Video Dedup')
+    if (process.platform === 'darwin') await expect.poll(() => menuLabels(ui)).toEqual(['File', 'Edit', 'View', 'Window'])
+    await expect.poll(() => savedSettings(userData)).toEqual({ theme: 'system', language: 'en' })
     await ui.app.close()
   })
 })

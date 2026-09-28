@@ -1,7 +1,7 @@
-/** 用户取消了处理 */
+/** 用户取消了处理。这个错误不会显示给用户，界面有自己的说明 */
 export class ProcessingCancelled extends Error {
   constructor() {
-    super('已取消处理')
+    super('Processing cancelled')
     this.name = 'ProcessingCancelled'
   }
 }

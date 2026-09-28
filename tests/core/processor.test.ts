@@ -6,6 +6,7 @@ import { setTimeout as sleep } from 'node:timers/promises'
 import { afterAll, describe, expect, it } from 'vitest'
 import { FFmpegError, ProcessingCancelled, ProcessingError } from '../../src/core/errors'
 import { VideoProcessor } from '../../src/core/processor'
+import { en } from '../../src/shared/i18n/en'
 import { DEFAULT_FEATURES, type FeatureOptions } from '../../src/shared/options'
 import type { ProgressInfo, Stage } from '../../src/shared/types'
 import {
@@ -442,5 +443,33 @@ describe('取消', () => {
     ).rejects.toBeInstanceOf(ProcessingCancelled)
     expect(existsSync(target)).toBe(false)
     expect(leftovers(OUT)).toEqual([])
+  })
+})
+
+describe('界面语言', () => {
+  it('传入英文的文字时，日志和错误信息都是英文（执行的命令、FFmpeg 自己的输出原样显示）', async () => {
+    const logs: string[] = []
+    const events = { log: (message: string, kind: string) => kind !== 'ffmpeg' && logs.push(message) }
+    const out = path.join(OUT, 'english.mp4')
+    await new VideoProcessor(FFMPEG, events, en.processor).run({
+      ...NONE,
+      mirror: true,
+      md5Change: true,
+      inputPath: fixture('short.mp4'),
+      outputPath: out,
+    })
+    expect(logs).toContain('Effect: mirror')
+    expect(logs).toContain('Cover thumbnail embedded')
+    expect(logs).toContain('Output file saved')
+    expect(logs.some((line) => line.startsWith('Command: ffmpeg '))).toBe(true)
+    expect(logs.filter((line) => /\p{Script=Han}/u.test(line))).toEqual([])
+    await expect(
+      new VideoProcessor(FFMPEG, {}, en.processor).run({
+        ...NONE,
+        mirror: true,
+        inputPath: fixture('audio_only.m4a'),
+        outputPath: path.join(OUT, 'english-err.mp4'),
+      }),
+    ).rejects.toThrow('The input file has no video')
   })
 })

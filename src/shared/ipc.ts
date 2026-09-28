@@ -1,4 +1,5 @@
 // 主进程与界面之间的通信接口：通道名称、传递的数据，以及 preload 暴露给界面的 window.api
+import type { Language } from './i18n/language'
 import type { ProcessingOptions } from './options'
 import type { LogKind, MediaInfo, ProgressInfo, Stage } from './types'
 
@@ -6,6 +7,9 @@ export const IPC = {
   appInfo: 'app:info',
   getTheme: 'theme:get',
   setTheme: 'theme:set',
+  /** 同步读取：preload 在页面脚本运行前取得界面语言 */
+  getLanguage: 'language:get',
+  setLanguage: 'language:set',
   chooseInput: 'dialog:choose-input',
   chooseOutput: 'dialog:choose-output',
   inspectInput: 'file:inspect',
@@ -27,17 +31,17 @@ export interface FFmpegInfo {
   version: string | null
   /** env：环境变量 VIDEO_DEDUP_FFMPEG 指定；bundled：随程序提供；system：系统中安装的 */
   source: 'env' | 'bundled' | 'system'
-  /** 版本过旧等问题的提示，没有问题时为 null */
-  warning: string | null
+  /** false 表示版本过旧（低于 5.1） */
+  supported: boolean
 }
 
 export interface AppInfo {
   version: string
   platform: string
+  /** 是否是打包后的正式版本：找不到 FFmpeg 时两者的解决办法不同 */
+  packaged: boolean
   /** 找不到 FFmpeg 时为 null */
   ffmpeg: FFmpegInfo | null
-  /** 找不到 FFmpeg 时告诉用户怎么安装 */
-  ffmpegMissingMessage: string
 }
 
 export interface InputFile {
@@ -50,7 +54,10 @@ export interface InputFile {
   media: MediaInfo | null
 }
 
-export type InspectResult = { ok: true; file: InputFile } | { ok: false; message: string }
+/** 选择的文件不能读取的原因：路径无效、不是文件、读取失败（detail 是系统给出的原因） */
+export type InspectFailure = 'invalidPath' | 'notAFile' | 'unreadable'
+
+export type InspectResult = { ok: true; file: InputFile } | { ok: false; reason: InspectFailure; detail?: string }
 
 export type Md5Result = { status: 'ok'; value: string } | { status: 'error'; message: string } | { status: 'aborted' }
 
@@ -89,9 +96,13 @@ export type JobEvent =
 export type MenuCommand = 'open'
 
 export interface Api {
+  /** 页面加载时的界面语言；之后的切换由界面自己记录 */
+  initialLanguage: Language
   getAppInfo(): Promise<AppInfo>
   getTheme(): Promise<ThemeMode>
   setTheme(mode: ThemeMode): Promise<void>
+  /** 切换界面语言：保存选择，并更新菜单等系统界面的文字 */
+  setLanguage(language: Language): Promise<void>
   /** 打开选择视频的对话框，取消时返回 null */
   chooseInput(): Promise<string | null>
   /** 打开“另存为”对话框，取消时返回 null */

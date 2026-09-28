@@ -3,11 +3,13 @@ import { stat } from 'node:fs/promises'
 import path from 'node:path'
 import { defaultOutputPath, md5File } from '../core/files'
 import { probeMedia } from '../core/probe'
+import { isLanguage } from '../shared/i18n/language'
 import { IPC, type AppInfo, type InspectResult, type Md5Result, type Md5Slot, type StartRequest } from '../shared/ipc'
 import type { MediaInfo } from '../shared/types'
-import { ffmpegMissingMessage, resolveFFmpeg } from './ffmpeg'
+import { resolveFFmpeg } from './ffmpeg'
 import type { JobManager } from './job'
-import { getTheme, isThemeMode, setTheme } from './settings'
+import { rebuildMenu } from './menu'
+import { getLanguage, getTheme, isThemeMode, setLanguage, setTheme, t } from './settings'
 
 const VIDEO_EXTENSIONS = ['mp4', 'avi', 'mkv', 'mov', 'wmv', 'flv', 'webm', 'm4v']
 
@@ -23,8 +25,8 @@ export function registerIpc(jobs: JobManager): void {
   ipcMain.handle(IPC.appInfo, async (): Promise<AppInfo> => ({
     version: app.getVersion(),
     platform: process.platform,
+    packaged: app.isPackaged,
     ffmpeg: await resolveFFmpeg(),
-    ffmpegMissingMessage: ffmpegMissingMessage(),
   }))
 
   ipcMain.handle(IPC.getTheme, () => getTheme())
@@ -32,13 +34,22 @@ export function registerIpc(jobs: JobManager): void {
     if (isThemeMode(mode)) setTheme(mode)
   })
 
+  // preload 在页面脚本运行前同步读取，必须总是给出结果
+  ipcMain.on(IPC.getLanguage, (event) => {
+    event.returnValue = getLanguage()
+  })
+  ipcMain.handle(IPC.setLanguage, (_event, language: unknown) => {
+    if (isLanguage(language) && setLanguage(language)) rebuildMenu()
+  })
+
   ipcMain.handle(IPC.chooseInput, async (event) => {
+    const text = t().dialogs
     const options: Electron.OpenDialogOptions = {
-      title: '打开视频',
+      title: text.openTitle,
       properties: ['openFile'],
       filters: [
-        { name: '视频文件', extensions: VIDEO_EXTENSIONS },
-        { name: '所有文件', extensions: ['*'] },
+        { name: text.videoFiles, extensions: VIDEO_EXTENSIONS },
+        { name: text.allFiles, extensions: ['*'] },
       ],
     }
     const window = windowOf(event)
@@ -47,12 +58,13 @@ export function registerIpc(jobs: JobManager): void {
   })
 
   ipcMain.handle(IPC.chooseOutput, async (event, current: unknown) => {
+    const text = t().dialogs
     const defaultPath = isText(current) ? current : undefined
     const ext = defaultPath ? path.extname(defaultPath).slice(1) : ''
     const options: Electron.SaveDialogOptions = {
-      title: '选择输出位置',
+      title: text.saveTitle,
       defaultPath,
-      filters: ext ? [{ name: `.${ext} 文件`, extensions: [ext] }, { name: '所有文件', extensions: ['*'] }] : undefined,
+      filters: ext ? [{ name: text.extensionFiles(ext), extensions: [ext] }, { name: text.allFiles, extensions: ['*'] }] : undefined,
       // macOS 和 Windows 的“另存为”对话框总会确认是否覆盖，Linux 需要打开这个选项
       properties: ['createDirectory', 'showOverwriteConfirmation'],
     }
@@ -61,15 +73,16 @@ export function registerIpc(jobs: JobManager): void {
     return result.canceled || !result.filePath ? null : result.filePath
   })
 
+  // 失败时只返回原因，界面按当前语言显示，切换语言后说明也会跟着变
   ipcMain.handle(IPC.inspectInput, async (_event, file: unknown): Promise<InspectResult> => {
-    if (!isText(file)) return { ok: false, message: '无效的文件路径' }
+    if (!isText(file)) return { ok: false, reason: 'invalidPath' }
     let size: number
     try {
       const info = await stat(file)
-      if (!info.isFile()) return { ok: false, message: '请选择视频文件，而不是文件夹' }
+      if (!info.isFile()) return { ok: false, reason: 'notAFile' }
       size = info.size
     } catch (error) {
-      return { ok: false, message: `无法读取文件：${(error as Error).message}` }
+      return { ok: false, reason: 'unreadable', detail: (error as Error).message }
     }
     const ffmpeg = await resolveFFmpeg()
     let media: MediaInfo | null = null
@@ -86,7 +99,7 @@ export function registerIpc(jobs: JobManager): void {
   // 每个位置（原文件、新文件）同时只算一个 MD5，开始新的计算时取消上一次的；路径为空时只取消
   const hashing = new Map<Md5Slot, AbortController>()
   ipcMain.handle(IPC.md5, async (_event, file: unknown, slot: unknown): Promise<Md5Result> => {
-    if (slot !== 'input' && slot !== 'output') return { status: 'error', message: '无效的参数' }
+    if (slot !== 'input' && slot !== 'output') return { status: 'error', message: t().errors.invalidArgument }
     hashing.get(slot)?.abort()
     if (!isText(file)) return { status: 'aborted' }
     const controller = new AbortController()
@@ -104,13 +117,15 @@ export function registerIpc(jobs: JobManager): void {
 
   ipcMain.handle(IPC.cancelJob, async (event) => {
     if (!jobs.running) return false
+    const text = t()
     const box = {
       type: 'question' as const,
-      buttons: ['取消处理', '继续处理'],
+      title: text.appName,
+      buttons: [text.dialogs.cancelJob.confirm, text.dialogs.cancelJob.keep],
       defaultId: 1,
       cancelId: 1,
-      message: '确定要取消当前的处理吗？',
-      detail: '已经处理的部分会被丢弃，不会生成输出文件。',
+      message: text.dialogs.cancelJob.message,
+      detail: text.dialogs.cancelJob.detail,
     }
     const window = windowOf(event)
     const { response } = window ? await dialog.showMessageBox(window, box) : await dialog.showMessageBox(box)
@@ -123,7 +138,7 @@ export function registerIpc(jobs: JobManager): void {
   ipcMain.handle(IPC.showInFolder, (_event, file: unknown) => {
     if (isText(file)) shell.showItemInFolder(file)
   })
-  ipcMain.handle(IPC.openFile, async (_event, file: unknown) => (isText(file) ? shell.openPath(file) : '无效的文件路径'))
+  ipcMain.handle(IPC.openFile, async (_event, file: unknown) => (isText(file) ? shell.openPath(file) : t().errors.invalidPath))
   // Electron 44 起主进程的剪贴板接口也是异步的，等写入完成后再返回
   ipcMain.handle(IPC.copyText, async (_event, text: unknown) => {
     if (typeof text === 'string') await clipboard.writeText(text)

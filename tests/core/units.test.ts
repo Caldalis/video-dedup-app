@@ -1,18 +1,19 @@
 // 不需要运行 FFmpeg 的单元测试：滤镜、参数校验、输出解析、路径和 MD5 等
 import { createHash } from 'node:crypto'
-import { chmodSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { chmodSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { FFMPEG_ENV_VAR, isVersionSupported, locateFFmpeg, parseEncoders } from '../../src/core/ffmpeg'
 import { defaultOutputPath, isSameFile, md5File } from '../../src/core/files'
 import { buildVideoFilters } from '../../src/core/filters'
 import { parseMediaInfo, timeToSeconds } from '../../src/core/probe'
 import { formatCommand, LineSplitter, randomString } from '../../src/core/util'
+import { messages } from '../../src/shared/i18n'
+import { detectLanguage } from '../../src/shared/i18n/language'
 import {
   DEFAULT_FEATURES,
-  INTERVAL_ERROR,
-  OPACITY_ERROR,
   isCopyOnly,
   parseInterval,
   parseOpacity,
@@ -66,7 +67,7 @@ describe('buildVideoFilters', () => {
 
 describe('参数校验', () => {
   it('没有开启任何功能时不能开始', () => {
-    expect(validateFeatures(NONE)).toBe('还没有开启任何功能')
+    expect(validateFeatures(NONE)).toBe('noFeatures')
     expect(validateFeatures(DEFAULT_FEATURES)).toBeNull()
   })
 
@@ -75,7 +76,7 @@ describe('参数校验', () => {
       expect(validateFeatures({ ...NONE, maskInvert: true, maskOpacity: parseOpacity(text) })).toBeNull()
     }
     for (const text of ['0', '-0.1', '1.01', 'abc', '', ' ']) {
-      expect(validateFeatures({ ...NONE, maskInvert: true, maskOpacity: parseOpacity(text) })).toBe(OPACITY_ERROR)
+      expect(validateFeatures({ ...NONE, maskInvert: true, maskOpacity: parseOpacity(text) })).toBe('opacity')
     }
     // 没有勾选蒙版倒置时不检查不透明度
     expect(validateFeatures({ ...DEFAULT_FEATURES, maskOpacity: Number.NaN })).toBeNull()
@@ -86,8 +87,45 @@ describe('参数校验', () => {
       expect(validateFeatures({ ...NONE, frameSampling: true, samplingInterval: parseInterval(text) })).toBeNull()
     }
     for (const text of ['1', '0', '5.0', '2.5', '-3', 'x', '']) {
-      expect(validateFeatures({ ...NONE, frameSampling: true, samplingInterval: parseInterval(text) })).toBe(INTERVAL_ERROR)
+      expect(validateFeatures({ ...NONE, frameSampling: true, samplingInterval: parseInterval(text) })).toBe('interval')
     }
+  })
+
+  it('问题的说明按界面语言显示', () => {
+    expect(messages('zh-CN').problems.opacity).toBe('蒙版倒置的不透明度需要是大于 0、不超过 1 的数字，例如 0.03')
+    expect(messages('en').problems.interval).toBe('The Drop frames interval must be a whole number of at least 2, for example 5')
+  })
+})
+
+describe('界面语言', () => {
+  it('按系统的首选语言列表确定：先遇到中文用中文，先遇到英文用英文，都没有时用英文', () => {
+    expect(detectLanguage(['zh-Hans-CN'])).toBe('zh-CN')
+    expect(detectLanguage(['zh-TW', 'en-US'])).toBe('zh-CN')
+    expect(detectLanguage(['ja-JP', 'zh-Hans-CN', 'en-US'])).toBe('zh-CN')
+    expect(detectLanguage(['en-US', 'zh-Hans-CN'])).toBe('en')
+    // Linux 上的写法
+    expect(detectLanguage(['zh_CN.UTF-8', 'zh_CN', 'zh', 'C'])).toBe('zh-CN')
+    expect(detectLanguage(['fr-FR', 'de'])).toBe('en')
+    expect(detectLanguage([])).toBe('en')
+  })
+
+  it('除了中文字典，源码中没有写死的中文：界面文字都放在字典里（注释和 console 输出除外）', () => {
+    const src = fileURLToPath(new URL('../../src', import.meta.url))
+    // 中文字典本身，以及切换按钮上用中文书写的“中文”
+    const allowed = new Set(['shared/i18n/zh-CN.ts', 'shared/i18n/language.ts'])
+    const found: string[] = []
+    for (const file of readdirSync(src, { recursive: true, encoding: 'utf8' })) {
+      const name = file.split(path.sep).join('/')
+      if (!/\.tsx?$/.test(name) || allowed.has(name)) continue
+      // 去掉注释（包括 JSX 中的 {/* */}），保留换行，行号不变
+      const code = readFileSync(path.join(src, file), 'utf8')
+        .replace(/\/\*[\s\S]*?\*\//g, (comment) => comment.replace(/[^\n]/g, ''))
+        .replace(/\/\/.*$/gm, '')
+      code.split('\n').forEach((line, index) => {
+        if (/\p{Script=Han}/u.test(line) && !/\bconsole\.\w+\(/.test(line)) found.push(`src/${name}:${index + 1}: ${line.trim()}`)
+      })
+    }
+    expect(found).toEqual([])
   })
 })
 

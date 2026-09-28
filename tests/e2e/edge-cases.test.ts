@@ -138,8 +138,9 @@ describe('安全', () => {
     expect(await page.evaluate<string>('typeof process')).toBe('undefined')
     expect(await page.evaluate<string[]>('Object.keys(window.api).sort()')).toEqual(
       [
-        'cancelJob', 'cancelMd5', 'chooseInput', 'chooseOutput', 'copyText', 'getAppInfo', 'getTheme', 'inspectInput',
-        'md5', 'onJobEvent', 'onMenuCommand', 'openFile', 'pathForFile', 'setTheme', 'showInFolder', 'startJob',
+        'cancelJob', 'cancelMd5', 'chooseInput', 'chooseOutput', 'copyText', 'getAppInfo', 'getTheme', 'initialLanguage',
+        'inspectInput', 'md5', 'onJobEvent', 'onMenuCommand', 'openFile', 'pathForFile', 'setLanguage', 'setTheme',
+        'showInFolder', 'startJob',
       ].sort(),
     )
     const url = page.url()

@@ -1,7 +1,7 @@
 import { app, BrowserWindow, dialog, screen } from 'electron'
 import path from 'node:path'
 import type { JobManager } from './job'
-import { windowBackground } from './settings'
+import { t, windowBackground } from './settings'
 
 /** 创建主窗口：按屏幕大小确定尺寸；正在处理时关闭窗口（包括 macOS 上的 Command+Q）要先确认 */
 export function createMainWindow(jobs: JobManager): BrowserWindow {
@@ -14,7 +14,8 @@ export function createMainWindow(jobs: JobManager): BrowserWindow {
     minWidth: Math.min(880, width),
     minHeight: Math.min(600, height),
     show: false,
-    title: '视频去重工具',
+    // 页面加载后，窗口标题由页面的 <title> 决定，跟随界面语言
+    title: t().appName,
     backgroundColor: windowBackground(),
     autoHideMenuBar: true,
     // macOS：隐藏标题栏，红绿灯按钮嵌在界面顶部
@@ -50,12 +51,14 @@ export function createMainWindow(jobs: JobManager): BrowserWindow {
   async function confirmClose(): Promise<void> {
     if (asking) return
     asking = true
+    const text = t()
     const { response } = await dialog.showMessageBox(window, {
       type: 'warning',
-      buttons: ['退出', '继续处理'],
+      title: text.appName,
+      buttons: [text.dialogs.quit.confirm, text.dialogs.quit.keep],
       defaultId: 1,
       cancelId: 1,
-      message: '正在处理视频，退出会取消当前的处理。确定要退出吗？',
+      message: text.dialogs.quit.message,
     })
     asking = false
     if (response !== 0) return

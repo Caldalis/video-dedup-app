@@ -1,4 +1,4 @@
-import type { Stage } from '../../../shared/types'
+import type { Messages } from '../../../shared/i18n'
 
 export function formatBytes(bytes: number): string {
   const units = ['B', 'KB', 'MB', 'GB', 'TB']
@@ -21,14 +21,14 @@ export function formatDuration(seconds: number): string {
   return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${pad(m)}:${pad(s)}`
 }
 
-/** 用时显示为“0.6 秒”“12 秒”“3 分 05 秒” */
-export function formatElapsed(seconds: number): string {
-  if (seconds < 10) return `${Math.max(0.1, seconds).toFixed(1)} 秒`
+/** 用时显示为“0.6 秒”“12 秒”“3 分 05 秒”，单位按界面语言 */
+export function formatElapsed(seconds: number, units: Messages['units']): string {
+  if (seconds < 10) return units.seconds(Math.max(0.1, seconds).toFixed(1))
   const total = Math.round(seconds)
-  if (total < 60) return `${total} 秒`
+  if (total < 60) return units.seconds(String(total))
   const m = Math.floor(total / 60)
   const s = total % 60
-  return m < 60 ? `${m} 分 ${String(s).padStart(2, '0')} 秒` : `${Math.floor(m / 60)} 小时 ${m % 60} 分`
+  return m < 60 ? units.minutes(m, String(s).padStart(2, '0')) : units.hours(Math.floor(m / 60), m % 60)
 }
 
 export function formatFps(fps: number): string {
@@ -39,6 +39,7 @@ export function formatSpeed(speed: number): string {
   return `${speed >= 10 ? speed.toFixed(0) : speed.toFixed(1)}×`
 }
 
+/** 日志的时间，两种界面语言都显示为 HH:MM:SS */
 export function formatClock(date: Date): string {
   return date.toLocaleTimeString('zh-CN', { hour12: false })
 }
@@ -56,17 +57,4 @@ export function extname(file: string): string {
   const name = basename(file)
   const index = name.lastIndexOf('.')
   return index > 0 ? name.slice(index).toLowerCase() : ''
-}
-
-export const STAGE_LABELS: Readonly<Record<Stage, string>> = {
-  probe: '正在读取视频信息',
-  encode: '正在重新编码',
-  copy: '正在复制音视频流',
-  cover: '正在嵌入封面缩略图',
-  finalize: '正在保存',
-}
-
-/** 各系统中文件管理器的名称 */
-export function fileManagerName(platform: string | undefined): string {
-  return platform === 'darwin' ? '访达' : platform === 'win32' ? '资源管理器' : '文件管理器'
 }

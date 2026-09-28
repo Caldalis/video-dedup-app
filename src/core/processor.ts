@@ -8,6 +8,7 @@ import {
   TIME_JUMP_PERIOD,
   type ProcessingOptions,
 } from '../shared/options'
+import { zhCN, type ProcessorText } from '../shared/i18n/zh-CN'
 import type { LogKind, MediaInfo, ProgressInfo, Stage } from '../shared/types'
 import { FFmpegError, ProcessingCancelled, ProcessingError } from './errors'
 import { availableEncoders, runCapture } from './ffmpeg'
@@ -65,17 +66,19 @@ async function makeTempDir(): Promise<string> {
 
 /**
  * 执行一次视频处理：调用 run() 开始，处理过程中可以随时调用 cancel()。
- * 只调用 FFmpeg，不涉及界面
+ * 只调用 FFmpeg，不涉及界面；日志和错误信息使用 text 中的文字，默认是中文
  */
 export class VideoProcessor {
   readonly ffmpegPath: string
   private readonly events: ProcessorEvents
+  private readonly text: ProcessorText
   private cancelled = false
   private child: ChildProcess | null = null
 
-  constructor(ffmpegPath: string, events: ProcessorEvents = {}) {
+  constructor(ffmpegPath: string, events: ProcessorEvents = {}, text: ProcessorText = zhCN.processor) {
     this.ffmpegPath = ffmpegPath
     this.events = events
+    this.text = text
   }
 
   /** 取消处理：结束正在运行的 FFmpeg */
@@ -96,19 +99,25 @@ export class VideoProcessor {
    * 失败或取消时不会留下半成品，也不会破坏已经存在的同名文件
    */
   async run(options: ProcessingOptions): Promise<void> {
+    const text = this.text
     this.checkCancelled()
-    this.log(`输入：${options.inputPath}`)
-    this.log(`输出：${options.outputPath}`)
+    this.log(text.input(options.inputPath))
+    this.log(text.output(options.outputPath))
     this.setStage('probe')
-    const info = await probeMedia(this.ffmpegPath, options.inputPath, (child) => this.track(child))
+    let info: MediaInfo
+    try {
+      info = await probeMedia(this.ffmpegPath, options.inputPath, (child) => this.track(child))
+    } catch (error) {
+      throw new ProcessingError(text.cannotRunFFmpeg((error as Error).message), { cause: error })
+    }
     this.checkCancelled()
     if (!info.hasVideo) {
-      throw new ProcessingError(info.error ? `无法读取输入文件：${info.error}` : '输入文件中没有视频画面')
+      throw new ProcessingError(info.error ? text.cannotReadInput(info.error) : text.noVideo)
     }
     if (info.duration) {
-      this.log(`时长：${info.duration.toFixed(2)} 秒`)
+      this.log(text.duration(info.duration.toFixed(2)))
     } else {
-      this.log('读不到视频时长，处理时不显示进度百分比')
+      this.log(text.noDuration)
     }
 
     const { dir, name, ext } = path.parse(options.outputPath)
@@ -129,9 +138,7 @@ export class VideoProcessor {
       try {
         await rename(result, options.outputPath)
       } catch (error) {
-        throw new ProcessingError(`无法写入输出文件（文件可能正被其他程序打开）：${(error as Error).message}`, {
-          cause: error,
-        })
+        throw new ProcessingError(text.cannotWriteOutput((error as Error).message), { cause: error })
       }
     } finally {
       for (const file of [tempVideo, tempCover]) {
@@ -139,12 +146,12 @@ export class VideoProcessor {
           await unlink(file)
         } catch (error) {
           if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
-            this.log(`删除临时文件失败：${file}（${(error as Error).message}）`)
+            this.log(text.tempDeleteFailed(file, (error as Error).message))
           }
         }
       }
     }
-    this.log('输出文件已保存')
+    this.log(text.saved)
   }
 
   /** 读取 FFmpeg 支持的编码器。测试时可以在子类中改写，模拟缺少某个编码器的 FFmpeg */
@@ -153,26 +160,21 @@ export class VideoProcessor {
   }
 
   private logFeatures(options: ProcessingOptions): void {
-    if (options.mirror) this.log('效果：水平镜像')
-    if (options.maskInvert) this.log(`效果：蒙版倒置，不透明度 ${options.maskOpacity}`)
-    if (options.rgbShift) this.log('效果：RGB偏移')
-    if (options.timeJump) {
-      this.log(`效果：时间跳跃，时间轴最多偏移 ±${TIME_JUMP_AMPLITUDE} 秒，周期 ${TIME_JUMP_PERIOD} 秒`)
-    }
+    const text = this.text
+    if (options.mirror) this.log(text.effectMirror)
+    if (options.maskInvert) this.log(text.effectMask(options.maskOpacity))
+    if (options.rgbShift) this.log(text.effectRgbShift)
+    if (options.timeJump) this.log(text.effectTimeJump(TIME_JUMP_AMPLITUDE, TIME_JUMP_PERIOD))
     if (options.frameSampling) {
       const n = options.samplingInterval
-      this.log(
-        options.samplingRandom
-          ? `效果：视频抽帧，每 ${n}~${n + SAMPLING_RANDOM_RANGE - 1} 帧随机抽掉 1 帧`
-          : `效果：视频抽帧，每 ${n} 帧抽掉 1 帧`,
-      )
+      this.log(options.samplingRandom ? text.effectSamplingRandom(n, n + SAMPLING_RANDOM_RANGE - 1) : text.effectSamplingFixed(n))
     }
   }
 
   /** 只修改 MD5：直接复制音视频流并写入随机注释，不重新编码，画质无损、速度快 */
   private async copyStreams(options: ProcessingOptions, info: MediaInfo, target: string): Promise<void> {
     this.setStage('copy')
-    this.log('只修改MD5值：复制音视频流，不重新编码')
+    this.log(this.text.copyOnly)
     try {
       await this.runFFmpeg(['-y', '-i', options.inputPath, '-c', 'copy', ...metadataArgs(), target], {
         duration: info.duration,
@@ -180,7 +182,7 @@ export class VideoProcessor {
     } catch (error) {
       if (!(error instanceof FFmpegError)) throw error
       // 例如输出格式装不下原来的编码（把 WMV 直接复制进 MP4），改为重新编码
-      this.log(`无法直接复制到 ${path.extname(target)} 格式，改为重新编码：${error.message}`)
+      this.log(this.text.copyFallback(path.extname(target), error.message))
       await this.encode(options, info, [], target)
     }
   }
@@ -188,7 +190,7 @@ export class VideoProcessor {
   /** 按滤镜重新编码视频 */
   private async encode(options: ProcessingOptions, info: MediaInfo, filters: string[], target: string): Promise<void> {
     this.setStage('encode')
-    this.log('重新编码视频画面')
+    this.log(this.text.reencode)
     const ext = path.extname(target).toLowerCase()
     const encoders = await this.availableEncoders()
     // 4:2:0 要求宽高为偶数，宽高本来就是偶数时 crop 不做任何改动
@@ -205,7 +207,7 @@ export class VideoProcessor {
     args.push('-fps_mode', 'vfr')
     if (ext === '.avi') {
       // AVI 只能以帧为单位记录时间
-      if (options.timeJump) this.log('提示：AVI 只能以整帧为单位记录时间，时间跳跃的偏移会按帧取整')
+      if (options.timeJump) this.log(this.text.aviTimeJump)
     } else {
       args.push('-enc_time_base:v', '1/90000')
     }
@@ -220,12 +222,12 @@ export class VideoProcessor {
     if (ext === '.webm') {
       // WebM 只能装 VP8/VP9/AV1，这里用 VP9，crf 32 的画质与 H.264 的 crf 23 相近
       if (!encoders.has('libvpx-vp9')) {
-        throw new ProcessingError('当前 FFmpeg 不支持 WebM 所需的 VP9 编码器（libvpx-vp9），请把输出文件改为 .mp4')
+        throw new ProcessingError(this.text.noVp9)
       }
       return ['-c:v', 'libvpx-vp9', '-crf', '32', '-b:v', '0', '-deadline', 'good', '-cpu-used', '4', '-row-mt', '1']
     }
     if (!encoders.has('libx264')) {
-      throw new ProcessingError('当前 FFmpeg 不包含 H.264 编码器（libx264），无法重新编码视频')
+      throw new ProcessingError(this.text.noX264)
     }
     // veryfast 的耗时约为 ultrafast 的 1.5 倍，输出文件却只有它的 1/3 到 1/2
     const args = ['-c:v', 'libx264', '-preset', 'veryfast', '-crf', '23']
@@ -239,19 +241,19 @@ export class VideoProcessor {
   /** 音频能直接复制就复制，避免再次有损压缩；输出格式不支持原音频编码时才重新编码 */
   private async audioCodecArgs(input: string, ext: string, encoders: ReadonlySet<string>): Promise<string[]> {
     if (await this.canCopyAudio(input, ext)) {
-      this.log('音频直接复制，不重新编码')
+      this.log(this.text.audioCopy)
       return ['-c:a', 'copy']
     }
     if (ext === '.webm') {
       for (const name of ['libopus', 'libvorbis']) {
         if (encoders.has(name)) {
-          this.log(`${ext} 格式不支持原音频编码，音频重新编码为 ${name}`)
+          this.log(this.text.audioReencode(ext, name))
           return ['-c:a', name]
         }
       }
-      throw new ProcessingError('当前 FFmpeg 不支持 WebM 所需的音频编码器（libopus / libvorbis），请把输出文件改为 .mp4')
+      throw new ProcessingError(this.text.noWebmAudio)
     }
-    this.log(`${ext} 格式不支持原音频编码，音频重新编码为 AAC`)
+    this.log(this.text.audioReencode(ext, 'AAC'))
     return ['-c:a', 'aac']
   }
 
@@ -276,12 +278,12 @@ export class VideoProcessor {
   private async embedCover(video: string, target: string, duration: number | null): Promise<string> {
     const ext = path.extname(video).toLowerCase()
     if (!COVER_AS_ATTACHED_PIC.includes(ext) && !COVER_AS_ATTACHMENT.includes(ext)) {
-      this.log(`${ext} 格式不支持内嵌封面缩略图，已跳过`)
+      this.log(this.text.noCoverSupport(ext))
       return video
     }
     this.checkCancelled()
     this.setStage('cover')
-    this.log('生成封面缩略图')
+    this.log(this.text.coverGenerating)
     const dir = await makeTempDir()
     const thumbnail = path.join(dir, 'cover.jpg')
     try {
@@ -291,7 +293,7 @@ export class VideoProcessor {
         ['-y', '-ss', seek.toFixed(3), '-i', video, '-frames:v', '1', '-an', '-vf', 'thumbnail,setsar=1', '-q:v', '2', thumbnail],
         { quiet: true },
       )
-      if ((await fileSize(thumbnail)) === 0) throw new FFmpegError('没有截出封面图片')
+      if ((await fileSize(thumbnail)) === 0) throw new FFmpegError(this.text.noThumbnail)
       const args = COVER_AS_ATTACHED_PIC.includes(ext)
         ? ['-y', '-i', video, '-i', thumbnail, '-map', '0', '-map', '1', '-c', 'copy', '-disposition:v:1', 'attached_pic', target]
         : ['-y', '-i', video, '-map', '0', '-c', 'copy', '-attach', thumbnail,
@@ -299,12 +301,12 @@ export class VideoProcessor {
       await this.runFFmpeg(args, { quiet: true })
     } catch (error) {
       if (!(error instanceof FFmpegError)) throw error
-      this.log(`无法嵌入封面缩略图，输出的视频不带封面：${error.message}`)
+      this.log(this.text.coverFailed(error.message))
       return video
     } finally {
       await rm(dir, { recursive: true, force: true })
     }
-    this.log('已嵌入封面缩略图')
+    this.log(this.text.coverEmbedded)
     return target
   }
 
@@ -317,7 +319,7 @@ export class VideoProcessor {
     // -nostats 关掉 stderr 中不断刷新的进度行，改由 -progress 把进度写到 stdout
     const fullArgs = ['-hide_banner', '-nostdin', '-nostats', '-progress', 'pipe:1', ...args]
     // FFmpeg 的完整路径在程序启动时已经显示过，这里只写 ffmpeg，免得命令太长
-    this.log(`命令：${formatCommand(['ffmpeg', ...fullArgs])}`, 'command')
+    this.log(this.text.command(formatCommand(['ffmpeg', ...fullArgs])), 'command')
 
     return new Promise((resolve, reject) => {
       const recent: string[] = []
@@ -353,13 +355,13 @@ export class VideoProcessor {
         if (this.cancelled) {
           reject(new ProcessingCancelled())
         } else if (spawnError) {
-          reject(new ProcessingError(`无法运行 FFmpeg：${spawnError.message}`, { cause: spawnError }))
+          reject(new ProcessingError(this.text.cannotRunFFmpeg(spawnError.message), { cause: spawnError }))
         } else if (code !== 0) {
           // 只显示说明原因的几行；找不到时显示最后几行输出
           const reasons = recent.filter((line) => ERROR_LINE_RE.test(line)).map((line) => line.replace(LOG_PREFIX_RE, ''))
           const detail = (reasons.length > 0 ? reasons.slice(-4) : recent.slice(-3)).join('\n')
-          const status = code === null ? `被信号 ${signal} 结束` : `返回错误码 ${code}`
-          reject(new FFmpegError(`FFmpeg ${status}${detail ? `\n${detail}` : ''}`))
+          const status = this.text.ffmpegExit(code, signal)
+          reject(new FFmpegError(`${status}${detail ? `\n${detail}` : ''}`))
         } else {
           resolve()
         }
