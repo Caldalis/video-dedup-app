@@ -1,41 +1,43 @@
-# 视频去重
+# Video Dedup
 
-一个视频去重的桌面程序：对画面做镜像、色彩偏移、时间轴微调等细微改动，并写入随机信息，让输出的视频无论是画面还是文件本身都和原视频不一样。视频处理由 FFmpeg 完成。
+English | [简体中文](README.zh-CN.md)
 
-使用 Electron + React + TypeScript 编写。
+A desktop app for “video dedup” (视频去重). Rather than finding duplicate files, it makes subtle changes to a video, such as mirroring, color channel shifts, and slight timing adjustments, and writes random information into the file, so that the output differs from the original both in its frames and as a file. Video processing is done by FFmpeg.
 
-> 本项目是实验性项目，出于学习和研究目的开发，以 [MIT 许可证](LICENSE) 开源。请勿将其用于违法违规或侵犯他人权益的用途，使用前请阅读[免责声明](#免责声明)。
+Built with Electron + React + TypeScript. The user interface is currently available in Simplified Chinese only.
 
-## 功能
+> This is an experimental project developed for learning and research, open-sourced under the [MIT License](LICENSE). Do not use it for anything illegal or that infringes on the rights of others. Please read the [Disclaimer](#disclaimer) before use.
 
-| 功能     | 效果                                                | FFmpeg 实现             |
-| ------ | ------------------------------------------------- | --------------------- |
-| 水平镜像   | 画面左右翻转                                            | `hflip`               |
-| RGB偏移  | 红色通道右移、蓝色通道下移 1 个像素，绿色不动，任意两个通道在水平、垂直方向上都只差 1 个像素 | `rgbashift`           |
-| 时间跳跃   | 每帧的显示时间按正弦规律前后微调（最多 ±0.04 秒，周期 8 秒），帧数不变          | `settb` + `setpts`    |
-| 修改MD5值 | 写入随机注释，不保留原视频的标题和日期；只勾选这一项时直接复制音视频流，不重新编码         | `-metadata`、`-c copy` |
-| 蒙版倒置   | 叠加一层半透明的反色蒙版，不透明度可调（默认 0.03）                      | `lutyuv`              |
-| 视频抽帧   | 每隔 N 帧抽掉 1 帧，也可以每次随机间隔 N~N+5 帧                    | `select`              |
+## Features
 
-“时间跳跃”和“修改MD5值”默认开启。
+| Feature | Effect | FFmpeg implementation |
+| --- | --- | --- |
+| Mirror (水平镜像) | Flips the picture horizontally | `hflip` |
+| RGB shift (RGB偏移) | Shifts the red channel right and the blue channel down by 1 pixel, leaving green in place, so any two channels are at most 1 pixel apart horizontally and vertically | `rgbashift` |
+| Time jump (时间跳跃) | Nudges each frame's display time back and forth along a sine wave (up to ±0.04 s, with a period of 8 s) without changing the number of frames | `settb` + `setpts` |
+| Change MD5 (修改MD5值) | Writes a random comment and does not carry over the original title and date; when it is the only feature selected, the audio and video streams are copied without re-encoding | `-metadata`, `-c copy` |
+| Mask invert (蒙版倒置) | Overlays a semi-transparent color-inverted layer with adjustable opacity (0.03 by default) | `lutyuv` |
+| Frame dropping (视频抽帧) | Drops 1 frame every N frames, or at random intervals of N to N+5 frames | `select` |
 
-- 浅色、深色、跟随系统三种外观，会记住上次的选择
-- 把视频拖到窗口任意位置即可选择，并显示时长、分辨率、帧率、编码和原始 MD5
-- 处理时显示进度、速度和预计剩余时间，可以随时取消；完成后显示新文件的 MD5，并可在访达或资源管理器中找到它
-- 声音能直接复制就不重新编码；输出为 MP4、M4V、MKV 时自动嵌入封面缩略图；WebM 使用 VP9 + Opus
-- 结果先写入临时文件，全部完成后才改名为输出文件：失败或取消时不会留下半成品，也不会破坏已有的同名文件
+Time jump and Change MD5 are enabled by default.
 
-## 快速开始
+- Light, dark, and system appearance, with your last choice remembered
+- Drop a video anywhere on the window to select it; the app shows its duration, resolution, frame rate, codecs, and original MD5
+- Shows progress, speed, and estimated time remaining while processing, and can be cancelled at any time; when finished, shows the new file's MD5 and can reveal the file in Finder or File Explorer
+- Audio is copied without re-encoding whenever possible; MP4, M4V, and MKV outputs get an embedded cover thumbnail; WebM output uses VP9 + Opus
+- Results are written to a temporary file first and renamed to the output file only after everything succeeds, so a failure or cancellation never leaves a partial file behind or damages an existing file with the same name
 
-需要 Node.js 22.12 或更高版本（推荐 24）和 pnpm 11：
+## Getting started
+
+Requires Node.js 22.12 or later (24 recommended) and pnpm 11:
 
 ```bash
-corepack enable        # 或者 npm install -g pnpm
-pnpm install           # 安装依赖，同时下载 FFmpeg（约 45 MB）
-pnpm dev               # 启动开发模式，修改界面代码后自动刷新；第一次运行时会下载 Electron（约 110 MB）
+corepack enable        # or: npm install -g pnpm
+pnpm install           # installs dependencies and downloads FFmpeg (about 45 MB)
+pnpm dev               # starts in development mode; the UI reloads when its code changes. The first run downloads Electron (about 110 MB)
 ```
 
-下载慢时可以改用国内镜像，在当前终端中设置以下环境变量后再执行上面的命令：
+If downloads are slow (for example, in mainland China), set the following environment variables in your current terminal to use mirrors, then run the commands above:
 
 ```bash
 # macOS / Linux
@@ -47,137 +49,137 @@ $env:ELECTRON_MIRROR="https://npmmirror.com/mirrors/electron/"
 $env:FFMPEG_BINARIES_URL="https://cdn.npmmirror.com/binaries/ffmpeg-static"
 ```
 
-> pnpm 11 默认不运行依赖包的安装脚本，本项目在 `pnpm-workspace.yaml` 的 `allowBuilds` 中允许了 ffmpeg-static 下载 FFmpeg 的脚本。如果安装后提示找不到 FFmpeg，执行 `pnpm rebuild ffmpeg-static` 重新下载。
+> pnpm 11 doesn't run the install scripts of dependencies by default. This project allows the ffmpeg-static script that downloads FFmpeg through `allowBuilds` in `pnpm-workspace.yaml`. If FFmpeg can't be found after installation, run `pnpm rebuild ffmpeg-static` to download it again.
 
-## 常用命令
+## Commands
 
-| 命令               | 作用                                  |
-| ---------------- | ----------------------------------- |
-| `pnpm dev`       | 以开发模式启动                             |
-| `pnpm build`     | 构建到 `out/` 目录                       |
-| `pnpm start`     | 以构建后的正式版本启动                         |
-| `pnpm typecheck` | 类型检查                                |
-| `pnpm test`      | 处理核心的测试：用真实的 FFmpeg 处理测试素材，逐项检查实际效果 |
-| `pnpm test:e2e`  | 界面测试：构建程序，并用 Playwright 模拟用户操作      |
-| `pnpm dist`      | 打包安装包到 `dist/` 目录                   |
-| `pnpm dist:dir`  | 只生成可以直接运行的程序目录，不做安装包                |
+| Command | Description |
+| --- | --- |
+| `pnpm dev` | Start in development mode |
+| `pnpm build` | Build into the `out/` directory |
+| `pnpm start` | Start the production build |
+| `pnpm typecheck` | Run type checking |
+| `pnpm test` | Processing core tests: process test media with a real FFmpeg and check each effect on the actual output |
+| `pnpm test:e2e` | UI tests: build the app and simulate user interactions with Playwright |
+| `pnpm dist` | Package installers into the `dist/` directory |
+| `pnpm dist:dir` | Only produce an app directory that runs directly, without an installer |
 
 ## FFmpeg
 
-程序按以下顺序查找 FFmpeg：
+The app looks for FFmpeg in the following order:
 
-1. 环境变量 `VIDEO_DEDUP_FFMPEG` 指定的程序
-2. 随程序提供的 FFmpeg：开发时是 ffmpeg-static 在 `pnpm install` 时下载的，打包后在安装目录的 `resources/ffmpeg` 中
-3. 系统中安装的 FFmpeg：`PATH` 中的，以及 macOS 上 Homebrew、MacPorts 默认目录中的
+1. The program specified by the `VIDEO_DEDUP_FFMPEG` environment variable
+2. The FFmpeg shipped with the app: during development, the one ffmpeg-static downloads during `pnpm install`; once packaged, the one in `resources/ffmpeg` under the installation directory
+3. FFmpeg installed on the system: on `PATH`, as well as in the default Homebrew and MacPorts directories on macOS
 
-界面右上角显示正在使用的 FFmpeg 版本，点旁边的 ⓘ 可以看到它的路径。本工具需要 FFmpeg 5.1 及以上版本。例如改用 Homebrew 安装的 FFmpeg：
+The top-right corner of the window shows the version of FFmpeg in use; click the ⓘ next to it to see its path. FFmpeg 5.1 or later is required. For example, to use FFmpeg installed with Homebrew:
 
 ```bash
 VIDEO_DEDUP_FFMPEG=/opt/homebrew/bin/ffmpeg pnpm dev
 ```
 
-ffmpeg-static 为各系统提供的 FFmpeg 都包含本工具用到的编码器（libx264、libvpx-vp9、libopus、libvorbis）：
+The FFmpeg builds that ffmpeg-static provides for each platform all include the encoders this app uses (libx264, libvpx-vp9, libopus, libvorbis):
 
-| 系统                | FFmpeg 版本                | 许可证                             |
-| ----------------- | ------------------------ | ------------------------------- |
-| Windows x64       | 6.1.1（gyan.dev）          | GPLv3                           |
-| macOS（Intel）      | 6.1.1                    | GPLv3                           |
-| macOS（Apple 芯片）   | 6.0                      | 包含 nonfree 部分，不能再分发（见[打包](#打包)） |
-| Linux x64 / arm64 | 7.0.2（johnvansickle.com） | GPLv3                           |
+| Platform | FFmpeg version | License |
+| --- | --- | --- |
+| Windows x64 | 6.1.1 (gyan.dev) | GPLv3 |
+| macOS (Intel) | 6.1.1 | GPLv3 |
+| macOS (Apple silicon) | 6.0 | Includes nonfree components and cannot be redistributed (see [Packaging](#packaging)) |
+| Linux x64 / arm64 | 7.0.2 (johnvansickle.com) | GPLv3 |
 
-**时间戳**：重新编码时总是加上 `-fps_mode vfr -enc_time_base:v 1/90000`（AVI 只能以帧为单位记录时间，不加后者），保留每一帧原本的显示时间：
+**Timestamps**: When re-encoding, the app always adds `-fps_mode vfr -enc_time_base:v 1/90000` (omitting the latter for AVI, which can only record time in whole frames) to keep each frame's original display time:
 
-- FFmpeg 7 以前的版本默认把 MP4 等格式重排成固定帧率，会抹掉时间跳跃的偏移，被抽掉的帧也会被补回来。
-- 编码器默认使用“1/帧率”的时间基。处理可变帧率的视频（例如手机拍的、做过时间跳跃的）时，两帧可能被舍入到同一时刻，后一帧会被丢掉。
-- `-enc_time_base:v filter` 也能保留时间，但 FFmpeg 7 才支持这种写法，所以直接写成 1/90000，与时间跳跃滤镜使用的时间基相同。
+- Before FFmpeg 7, output to formats such as MP4 is converted to a constant frame rate by default, which erases the time jump offsets and fills dropped frames back in.
+- Encoders use a time base of 1/frame rate by default. When processing variable-frame-rate videos (such as those shot on phones or processed with time jump), two frames may be rounded to the same timestamp, and the second one gets dropped.
+- `-enc_time_base:v filter` also preserves timestamps, but that syntax is only supported from FFmpeg 7 on, so the value is written as 1/90000, the same time base the time jump filter uses.
 
-## 测试
+## Testing
 
-`pnpm test` 先用当前的 FFmpeg 生成测试素材（缓存在系统临时目录中），然后逐项检查以下内容：
+`pnpm test` first generates test media with the current FFmpeg (cached in the system temp directory), then checks the following, item by item:
 
-- 抽帧的位置和间隔，蒙版倒置对画面的改变
-- 输出的像素格式，时间跳跃后每一帧的时间戳，可变帧率的视频不丢帧
-- 各种格式的封装、封面和音频，音画同步，写入的元数据
-- 带旋转信息的竖拍视频、带字幕的视频、很短的视频，文件名中有空格、中文和特殊字符的情况
-- 出错时的提示，取消后没有残留的文件和进程
+- Positions and intervals of dropped frames, how mask invert changes the picture, and the actual displacement of each color channel after RGB shift
+- Output pixel format, per-frame timestamps after time jump, and no frames lost from variable-frame-rate videos
+- Containers, covers, and audio for each format, audio/video sync, and written metadata
+- Portrait videos with rotation metadata, videos with subtitles, very short videos, and file names containing spaces, Chinese, and special characters
+- Error messages, and no leftover files or processes after cancellation
 
-换一个 FFmpeg 测试：
+To test with a different FFmpeg:
 
 ```bash
 VIDEO_DEDUP_FFMPEG=/opt/homebrew/bin/ffmpeg pnpm test
 ```
 
-`pnpm test:e2e` 会启动构建好的程序，由测试代替用户回答系统对话框，检查以下操作：
+`pnpm test:e2e` launches the built app, with the tests answering system dialogs in place of the user, and checks the following operations:
 
-- 选择文件、拖入文件，选择了不能处理的文件
-- 参数校验、处理、处理失败、覆盖确认
-- 取消，以及处理中关闭窗口
-- 快捷键、菜单、复制 MD5、在访达中显示
-- 外观切换，设置文件损坏，重复启动
-- 界面不能直接使用 Node.js，也不能跳转到其他页面
+- Choosing files, dropping files, and choosing files that can't be processed
+- Option validation, processing, processing failures, and overwrite confirmation
+- Cancelling, and closing the window during processing
+- Keyboard shortcuts, menus, copying the MD5, and showing the file in Finder
+- Switching appearance, a corrupted settings file, and launching a second instance
+- The UI can't use Node.js directly or navigate to other pages
 
-测试使用单独的用户数据目录，不会改动本机的设置，也不会真的打开访达或改动剪贴板。
+The tests use a separate user data directory, so they don't change your local settings, and they never actually open Finder or modify the clipboard.
 
-## 打包
+## Packaging
 
 ```bash
 pnpm dist
 ```
 
-- 每个系统的安装包需要在对应的系统上打包：ffmpeg-static 只下载当前系统的 FFmpeg，打包时把它复制到 `resources/ffmpeg`。
-- macOS 版默认做 ad-hoc 签名，不需要开发者证书。别人下载后，macOS 会提示“无法验证开发者”，可以在“系统设置 → 隐私与安全性”中选择仍要打开；不签名的话会提示“已损坏”，根本打不开。
-- 有 Apple 的 Developer ID 证书时，打包时用它签名并开启 hardened runtime，再按 [electron-builder 的说明](https://www.electron.build/code-signing) 做公证：`pnpm dist -c.mac.identity="证书名称" -c.mac.hardenedRuntime=true`。Windows 版没有配置签名。
-- **FFmpeg 的许可证**：分发安装包就是在分发其中的 FFmpeg。ffmpeg-static 下载的是 GPL 版本，分发时需要附上许可证并提供源码的获取方式。Apple 芯片 Mac 上的版本编译时开启了 `--enable-nonfree`，`ffmpeg -L` 会显示它不能合法地再分发。要分发 macOS 版，先把 `node_modules/ffmpeg-static/ffmpeg` 换成可以再分发的 FFmpeg，再打包。
+- Installers for each platform must be built on that platform: ffmpeg-static only downloads FFmpeg for the current platform, and packaging copies it into `resources/ffmpeg`.
+- The macOS build is ad-hoc signed by default, which needs no developer certificate. When others download it, macOS warns that the developer cannot be verified; they can choose Open Anyway in System Settings → Privacy & Security. Without a signature, macOS says the app is damaged and won't open it at all.
+- If you have an Apple Developer ID certificate, sign with it and enable the hardened runtime when packaging, then notarize following [electron-builder's instructions](https://www.electron.build/code-signing): `pnpm dist -c.mac.identity="Certificate Name" -c.mac.hardenedRuntime=true`. No signing is configured for the Windows build.
+- **FFmpeg license**: Distributing an installer means distributing the FFmpeg inside it. ffmpeg-static downloads GPL builds, so when distributing you need to include the license and provide a way to obtain the source code. The build for Apple silicon Macs was compiled with `--enable-nonfree`, and `ffmpeg -L` shows that it cannot be legally redistributed. To distribute the macOS version, first replace `node_modules/ffmpeg-static/ffmpeg` with a redistributable FFmpeg, then package.
 
-## 项目结构
+## Project structure
 
 ```
 src/
-├── core/          处理核心：调用 FFmpeg，只依赖 Node.js，与界面无关
-│   ├── processor.ts   VideoProcessor：重新编码或复制音视频流、嵌入封面、临时文件、取消
-│   ├── filters.ts     各项功能对应的 FFmpeg 滤镜
-│   ├── probe.ts       读取时长、分辨率、编码等信息
-│   ├── ffmpeg.ts      查找 FFmpeg，读取版本和编码器
-│   └── files.ts       MD5、默认输出路径
-├── shared/        主进程和界面共用：参数的定义与校验、功能说明、通信接口
-├── main/          Electron 主进程：窗口、菜单、对话框、处理任务、外观设置
-├── preload/       向界面提供 window.api
-└── renderer/      React 界面（顶栏、视频文件、去重功能、处理、日志）
+├── core/          Processing core: calls FFmpeg, depends only on Node.js, independent of the UI
+│   ├── processor.ts   VideoProcessor: re-encoding or stream copying, cover embedding, temp files, cancellation
+│   ├── filters.ts     FFmpeg filters for each feature
+│   ├── probe.ts       Reads duration, resolution, codecs, and other information
+│   ├── ffmpeg.ts      Locates FFmpeg and reads its version and encoders
+│   └── files.ts       MD5, default output path
+├── shared/        Shared by the main process and the UI: option definitions and validation, feature descriptions, IPC interfaces
+├── main/          Electron main process: window, menu, dialogs, processing jobs, appearance settings
+├── preload/       Exposes window.api to the UI
+└── renderer/      React UI (header, video file, dedup features, processing, log)
 tests/
-├── core/          处理核心的单元测试和集成测试
-├── e2e/           界面测试
-├── helpers/       测试素材，以及只用 FFmpeg 就能完成的各种检查
-└── setup/         生成测试素材
-build/icon.png     程序图标
+├── core/          Unit and integration tests for the processing core
+├── e2e/           UI tests
+├── helpers/       Test media, plus checks that can be done with FFmpeg alone
+└── setup/         Generates test media
+build/icon.png     App icon
 ```
 
-界面运行在沙箱中，不能直接使用 Node.js，只能调用 preload 提供的几个方法，主进程会检查收到的每个参数。打包后的页面带有内容安全策略，只加载程序自带的脚本和样式。
+The UI runs in a sandbox and can't use Node.js directly; it can only call the few methods provided by the preload script, and the main process validates every argument it receives. The packaged pages have a Content Security Policy that only loads the app's own scripts and styles.
 
-## 免责声明
+## Disclaimer
 
-本项目是一个实验性项目，用于学习和研究 Electron 桌面程序开发与 FFmpeg 视频处理技术，不是成熟的软件产品，功能和处理效果随时可能改变。使用前请仔细阅读以下内容。
+This is an experimental project for learning and researching Electron desktop app development and FFmpeg video processing. It is not a mature software product, and its features and processing results may change at any time. Please read the following carefully before use.
 
-**视频来源**：请只处理你拥有版权的视频（例如你本人拍摄、制作的），或者已经获得版权人授权的视频。
+**Video sources**: Only process videos you own the copyright to (for example, videos you shot or made yourself), or videos the copyright holder has authorized you to use.
 
-**请勿用于以下用途**，它们可能违反法律法规、侵犯他人权益或违反平台规则：
+**Do not use this project for any of the following**, as they may violate laws and regulations, infringe on the rights of others, or break platform rules:
 
-- 未经授权搬运、转载他人的视频，或者把他人的作品当作自己的原创发布
-- 规避视频平台的版权保护、原创检测、重复内容识别等机制
-- 批量制作、发布重复的内容，刷流量，或者骗取平台的收益分成、流量扶持和奖励
-- 制作、传播违法违规、虚假、色情、暴力等内容
-- 冒充他人、诈骗、诽谤，或者以其他方式侵犯他人的著作权、肖像权、名誉权、隐私权等合法权益
-- 其他违反法律法规，或者违反视频平台用户协议、社区规范的行为
+- Reposting or redistributing other people's videos without authorization, or passing off other people's work as your own original content
+- Circumventing video platforms' copyright protection, originality checks, duplicate content detection, or similar mechanisms
+- Mass-producing or publishing duplicate content, inflating traffic, or fraudulently obtaining platform revenue sharing, traffic support, or rewards
+- Creating or spreading illegal, false, pornographic, violent, or other prohibited content
+- Impersonation, fraud, defamation, or any other infringement of others' copyright, likeness, reputation, privacy, or other lawful rights and interests
+- Any other conduct that violates laws and regulations, or the terms of service or community guidelines of video platforms
 
-**不提供任何保证**：本项目按现状提供，不保证功能正确、完整、稳定，不保证处理结果能达到任何特定效果，也不保证会持续维护和更新。
+**No warranty**: This project is provided “as is”, with no guarantee that it works correctly, completely, or reliably, that processing results will achieve any particular effect, or that it will continue to be maintained and updated.
 
-**后果自负**：使用者需要自行遵守所在地的法律法规和相关平台的规则。因使用或无法使用本项目产生的一切后果，包括但不限于账号被限流或封禁、版权纠纷、经济损失、数据丢失、行政处罚和法律责任，都由使用者自行承担，本项目的作者和贡献者不承担任何责任。
+**Use at your own risk**: You are responsible for complying with the laws and regulations where you are and the rules of the platforms you use. You bear all consequences arising from the use of or inability to use this project, including but not limited to account restrictions or bans, copyright disputes, financial loss, data loss, administrative penalties, and legal liability. The authors and contributors of this project accept no liability whatsoever.
 
-**修改和再分发**：基于本项目修改、打包或再分发的版本，由修改者或分发者自行负责。
+**Modification and redistribution**: Anyone who modifies, packages, or redistributes a version based on this project is solely responsible for that version.
 
-本声明可能随时修改，以最新版本为准。
+This disclaimer may be revised at any time; the latest version applies.
 
-## 许可证
+## License
 
-本项目的代码以 [MIT 许可证](LICENSE) 开源。简单来说：任何人都可以免费使用、复制、修改、合并、发布、分发、再授权和销售本项目，只需要在副本中保留版权声明和许可声明；本项目不提供任何保证，作者不对使用它产生的任何后果负责。具体条款以 [LICENSE](LICENSE) 中的英文原文为准。
+This project's code is open-sourced under the [MIT License](LICENSE).
 
-MIT 许可证只适用于本项目自己的代码。本项目用到的第三方软件按各自的许可证发布，其中打包进安装包的 FFmpeg 使用 GPL 许可证，Apple 芯片 Mac 上的版本还含有不能再分发的部分，分发安装包时需要遵守它的许可证（见[打包](#打包)）。
+The MIT License applies only to this project's own code. Third-party software used by this project is released under its own licenses. In particular, the FFmpeg packaged into the installers is licensed under the GPL, and the build for Apple silicon Macs also contains components that cannot be redistributed; comply with its license when distributing installers (see [Packaging](#packaging)).
