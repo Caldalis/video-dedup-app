@@ -1,0 +1,97 @@
+# 发布安装包：推送 v 开头的标签（例如 v1.0.0）时，在各个系统上测试、打包，并创建 Release 草稿，检查后在 Releases 页面手动发布。
+# 也可以在 Actions 页面手动运行，这时只测试和打包、不创建 Release，打好的安装包在这次运行的 Artifacts 中
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    strategy:
+      # 一个系统失败时，其他系统继续打包，方便一次看到所有问题
+      fail-fast: false
+      matrix:
+        include:
+          - name: Windows x64
+            os: windows-latest
+            args: --win nsis --x64
+          - name: macOS Apple silicon
+            os: macos-latest
+            args: --mac dmg --arm64
+          # Intel 芯片版的 FFmpeg 支持更早的 macOS，最低版本放宽到 Electron 本身的要求（见 electron-builder.yml）
+          - name: macOS Intel
+            os: macos-15-intel
+            args: --mac dmg --x64 -c.mac.minimumSystemVersion=13.0
+          - name: Linux x64
+            os: ubuntu-latest
+            args: --linux AppImage --x64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+      # 安装 package.json 中 packageManager 指定的 pnpm 版本
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      - name: 检查标签与版本号一致
+        if: github.ref_type == 'tag'
+        shell: bash
+        run: |
+          version=$(node -p "require('./package.json').version")
+          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
+            echo "::error::标签是 $GITHUB_REF_NAME，但 package.json 中的版本号是 $version"
+            exit 1
+          fi
+
+      - name: 准备打包用的 FFmpeg
+        run: node scripts/prepare-ffmpeg.mjs
+
+      - run: pnpm typecheck
+
+      # 用要打包进安装包的 FFmpeg 运行处理核心的测试
+      - name: 测试
+        run: pnpm test
+        env:
+          VIDEO_DEDUP_FFMPEG: ${{ github.workspace }}/build/ffmpeg/bin/ffmpeg${{ runner.os == 'Windows' && '.exe' || '' }}
+
+      - name: 打包
+        run: pnpm exec electron-vite build && pnpm exec electron-builder ${{ matrix.args }} --publish never
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: ${{ matrix.name }}
+          path: |
+            dist/*.exe
+            dist/*.dmg
+            dist/*.AppImage
+          if-no-files-found: error
+
+  release:
+    name: Release draft
+    needs: build
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          path: dist
+          merge-multiple: true
+      - name: 计算各个文件的 SHA-256
+        working-directory: dist
+        run: sha256sum * > SHA256SUMS.txt
+      - name: 创建 Release 草稿
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          sed "s/{{VERSION}}/${GITHUB_REF_NAME#v}/g" .github/release-notes.md > "$RUNNER_TEMP/notes.md"
+          gh release create "$GITHUB_REF_NAME" dist/* --draft --title "$GITHUB_REF_NAME" --notes-file "$RUNNER_TEMP/notes.md"

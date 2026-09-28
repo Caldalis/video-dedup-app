@@ -13,6 +13,19 @@
   <img alt="处理完一个视频后的主界面：文件信息、原始和新的 MD5、选择的去重功能、处理日志" src="docs/screenshot-zh-CN-light.png">
 </picture>
 
+## 下载
+
+在 [Releases](https://github.com/Caldalis/video-dedup-app/releases) 页面下载对应系统的安装包：
+
+| 系统 | 文件 |
+| --- | --- |
+| Windows 10 / 11，64 位 | `video-dedup-<版本号>-win-x64.exe` |
+| macOS 15 及以上，Apple 芯片 | `video-dedup-<版本号>-mac-arm64.dmg` |
+| macOS 13 及以上，Intel 芯片 | `video-dedup-<版本号>-mac-x64.dmg` |
+| Linux，64 位 | `video-dedup-<版本号>-linux-x86_64.AppImage` |
+
+安装包没有使用付费的开发者证书签名，第一次打开时系统会给出安全提示：macOS 上在“系统设置 → 隐私与安全性”中点击“仍要打开”，Windows 上点击“更多信息”，再点击“仍要运行”。详见每个版本的发布说明。
+
 ## 功能
 
 | 功能     | 效果                                                | FFmpeg 实现             |
@@ -90,7 +103,7 @@ ffmpeg-static 为各系统提供的 FFmpeg 都包含本工具用到的编码器�
 | ----------------- | ------------------------ | ------------------------------- |
 | Windows x64       | 6.1.1（gyan.dev）          | GPLv3                           |
 | macOS（Intel）      | 6.1.1                    | GPLv3                           |
-| macOS（Apple 芯片）   | 6.0                      | 包含 nonfree 部分，不能再分发（见[打包](#打包)） |
+| macOS（Apple 芯片）   | 6.0                      | 包含 nonfree 部分，不能再分发；安装包中换成了 GPL 版本（见[打包](#打包)） |
 | Linux x64 / arm64 | 7.0.2（johnvansickle.com） | GPLv3                           |
 
 **时间戳**：重新编码时总是加上 `-fps_mode vfr -enc_time_base:v 1/90000`（AVI 只能以帧为单位记录时间，不加后者），保留每一帧原本的显示时间：
@@ -134,10 +147,11 @@ VIDEO_DEDUP_FFMPEG=/opt/homebrew/bin/ffmpeg pnpm test
 pnpm dist
 ```
 
-- 每个系统的安装包需要在对应的系统上打包：ffmpeg-static 只下载当前系统的 FFmpeg，打包时把它复制到 `resources/ffmpeg`。
+- 每个系统的安装包需要在对应的系统上打包：`pnpm dist` 会先执行 `scripts/prepare-ffmpeg.mjs`，在 `build/ffmpeg/bin` 中准备当前系统的 FFmpeg，打包时把它复制到 `resources/ffmpeg`，同时附上它的许可证（`COPYING.GPLv3`）和源码的获取方式（`SOURCES.md`）。
 - macOS 版默认做 ad-hoc 签名，不需要开发者证书。别人下载后，macOS 会提示“无法验证开发者”，可以在“系统设置 → 隐私与安全性”中选择仍要打开；不签名的话会提示“已损坏”，根本打不开。
 - 有 Apple 的 Developer ID 证书时，打包时用它签名并开启 hardened runtime，再按 [electron-builder 的说明](https://www.electron.build/code-signing) 做公证：`pnpm dist -c.mac.identity="证书名称" -c.mac.hardenedRuntime=true`。Windows 版没有配置签名。
-- **FFmpeg 的许可证**：分发安装包就是在分发其中的 FFmpeg。ffmpeg-static 下载的是 GPL 版本，分发时需要附上许可证并提供源码的获取方式。Apple 芯片 Mac 上的版本编译时开启了 `--enable-nonfree`，`ffmpeg -L` 会显示它不能合法地再分发。要分发 macOS 版，先把 `node_modules/ffmpeg-static/ffmpeg` 换成可以再分发的 FFmpeg，再打包。
+- **FFmpeg 的许可证**：分发安装包就是在分发其中的 FFmpeg，需要附上 GPL 许可证并提供源码的获取方式，`build/ffmpeg` 中的文件就是为此准备的。ffmpeg-static 在 Apple 芯片 Mac 上下载的 FFmpeg 编译时开启了 `--enable-nonfree`，`ffmpeg -L` 会显示它不能合法地再分发，所以脚本在这种 Mac 上改为下载 [Shaka Project](https://github.com/shaka-project/static-ffmpeg-binaries) 按 GPL 发布的静态版本，并校验文件。这个版本需要 macOS 15 及以上，所以 Apple 芯片版的安装包也需要 macOS 15 及以上；Intel 芯片版支持 macOS 13 及以上。
+- **发布**：推送与 `package.json` 中版本号一致的标签（例如 `v1.0.0`），GitHub Actions（`.github/workflows/release.yml`）会用要打包的 FFmpeg 运行测试，在 Windows、macOS（Apple 芯片和 Intel 芯片）、Linux 上打包，并创建带有安装包和校验值的 Release 草稿。在草稿中补充这个版本的更新内容后发布即可。也可以在 Actions 页面手动运行这个工作流，这时只打包，安装包在这次运行的 Artifacts 中。
 
 ## 项目结构
 
@@ -159,7 +173,10 @@ tests/
 ├── helpers/       测试素材，以及只用 FFmpeg 就能完成的各种检查
 └── setup/         生成测试素材
 build/icon.png     程序图标
+build/ffmpeg/      FFmpeg 的许可证和源码的获取方式，会放进安装包
+scripts/           打包前准备 FFmpeg 的脚本
 docs/              README 中的截图
+.github/           发布工作流：打包安装包，创建 Release 草稿
 ```
 
 界面运行在沙箱中，不能直接使用 Node.js，只能调用 preload 提供的几个方法，主进程会检查收到的每个参数。打包后的页面带有内容安全策略，只加载程序自带的脚本和样式。

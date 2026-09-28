@@ -8,6 +8,11 @@
   "main": "./out/main/index.js",
   "author": "Caldalis",
   "license": "MIT",
+  "homepage": "https://github.com/Caldalis/video-dedup-app",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Caldalis/video-dedup-app.git"
+  },
   "packageManager": "pnpm@11.21.0",
   "engines": {
     "node": ">=22.12"
@@ -19,8 +24,8 @@
     "typecheck": "tsc -p tsconfig.node.json && tsc -p tsconfig.web.json",
     "test": "vitest run --project core",
     "test:e2e": "electron-vite build && vitest run --project e2e",
-    "dist": "electron-vite build && electron-builder",
-    "dist:dir": "electron-vite build && electron-builder --dir"
+    "dist": "node scripts/prepare-ffmpeg.mjs && electron-vite build && electron-builder",
+    "dist:dir": "node scripts/prepare-ffmpeg.mjs && electron-vite build && electron-builder --dir"
   },
   "devDependencies": {
     "@types/node": "^24.13.6",

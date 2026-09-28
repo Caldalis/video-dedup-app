@@ -10,19 +10,23 @@ directories:
 files:
   - out/**
   - package.json
-# FFmpeg 放在 resources/ffmpeg 目录中（程序按这个位置查找）。
-# ffmpeg-static 只下载当前系统的 FFmpeg，所以每个系统的安装包需要在对应的系统上打包
+# FFmpeg 放在 resources/ffmpeg 目录中（程序按这个位置查找），并附上它的许可证和源码的获取方式。
+# FFmpeg 由 scripts/prepare-ffmpeg.mjs 准备在 build/ffmpeg/bin 中（pnpm dist 会先执行它）：它只准备当前系统的 FFmpeg，
+# 所以每个系统的安装包需要在对应的系统上打包
 extraResources:
-  - from: node_modules/ffmpeg-static
+  - from: build/ffmpeg/bin
+    to: ffmpeg
+  - from: build/ffmpeg
     to: ffmpeg
     filter:
-      - ffmpeg
-      - ffmpeg.exe
-      - ffmpeg.LICENSE
-      - ffmpeg.README
+      - COPYING.GPLv3
+      - SOURCES.md
 mac:
   category: public.app-category.video
   target: [dmg, zip]
+  # Apple 芯片版带的 FFmpeg 需要 macOS 15 及以上。Intel 芯片版的 FFmpeg 没有这个限制，
+  # 打包时加上 -c.mac.minimumSystemVersion=13.0，放宽到 Electron 本身的要求
+  minimumSystemVersion: "15.0"
   # 没有开发者证书时做 ad-hoc 签名：签名完整时，别人下载后 macOS 提示“无法验证开发者”，可以在
   # “系统设置 → 隐私与安全性”中选择仍要打开；不签名时会提示“已损坏”，无法打开。
   # ad-hoc 签名不能与 hardened runtime 一起使用。有 Developer ID 证书时，打包时指定

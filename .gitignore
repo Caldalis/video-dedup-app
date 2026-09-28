@@ -2,9 +2,10 @@
 node_modules/
 
 # 构建产物：electron-vite 输出到 out/，electron-builder 输出到 dist/。
-# build/ 里是程序图标，需要提交
+# build/ 里是程序图标和 FFmpeg 的许可证，需要提交；build/ffmpeg/bin/ 是打包前准备的 FFmpeg（见 scripts/prepare-ffmpeg.mjs）
 out/
 dist/
+build/ffmpeg/bin/
 
 # 日志
 *.log

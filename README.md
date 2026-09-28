@@ -13,6 +13,19 @@ Built with Electron + React + TypeScript.
   <img alt="The main window after processing a video: file details, the original and new MD5, the selected features and the processing log" src="docs/screenshot-en-light.png">
 </picture>
 
+## Download
+
+Download the installer for your system from the [Releases](https://github.com/Caldalis/video-dedup-app/releases) page:
+
+| System | File |
+| --- | --- |
+| Windows 10 / 11, 64-bit | `video-dedup-<version>-win-x64.exe` |
+| macOS 15 or later, Apple silicon | `video-dedup-<version>-mac-arm64.dmg` |
+| macOS 13 or later, Intel | `video-dedup-<version>-mac-x64.dmg` |
+| Linux, 64-bit | `video-dedup-<version>-linux-x86_64.AppImage` |
+
+The installers aren't signed with a paid developer certificate, so the system shows a warning the first time you open the app. On macOS, click **Open Anyway** in System Settings → Privacy & Security; on Windows, click **More info**, then **Run anyway**. The release notes explain this in detail.
+
 ## Features
 
 | Feature | Effect | FFmpeg implementation |
@@ -90,7 +103,7 @@ The FFmpeg builds that ffmpeg-static provides for each platform all include the 
 | --- | --- | --- |
 | Windows x64 | 6.1.1 (gyan.dev) | GPLv3 |
 | macOS (Intel) | 6.1.1 | GPLv3 |
-| macOS (Apple silicon) | 6.0 | Includes nonfree components and cannot be redistributed (see [Packaging](#packaging)) |
+| macOS (Apple silicon) | 6.0 | Includes nonfree components and cannot be redistributed; the installer uses a GPL build instead (see [Packaging](#packaging)) |
 | Linux x64 / arm64 | 7.0.2 (johnvansickle.com) | GPLv3 |
 
 **Timestamps**: When re-encoding, the app always adds `-fps_mode vfr -enc_time_base:v 1/90000` (omitting the latter for AVI, which can only record time in whole frames) to keep each frame's original display time:
@@ -134,10 +147,11 @@ The tests use a separate user data directory, so they don't change your local se
 pnpm dist
 ```
 
-- Installers for each platform must be built on that platform: ffmpeg-static only downloads FFmpeg for the current platform, and packaging copies it into `resources/ffmpeg`.
+- Installers for each platform must be built on that platform: `pnpm dist` first runs `scripts/prepare-ffmpeg.mjs`, which prepares FFmpeg for the current platform in `build/ffmpeg/bin`, and packaging copies it into `resources/ffmpeg` together with its license (`COPYING.GPLv3`) and where to get its source code (`SOURCES.md`).
 - The macOS build is ad-hoc signed by default, which needs no developer certificate. When others download it, macOS warns that the developer cannot be verified; they can choose Open Anyway in System Settings → Privacy & Security. Without a signature, macOS says the app is damaged and won't open it at all.
 - If you have an Apple Developer ID certificate, sign with it and enable the hardened runtime when packaging, then notarize following [electron-builder's instructions](https://www.electron.build/code-signing): `pnpm dist -c.mac.identity="Certificate Name" -c.mac.hardenedRuntime=true`. No signing is configured for the Windows build.
-- **FFmpeg license**: Distributing an installer means distributing the FFmpeg inside it. ffmpeg-static downloads GPL builds, so when distributing you need to include the license and provide a way to obtain the source code. The build for Apple silicon Macs was compiled with `--enable-nonfree`, and `ffmpeg -L` shows that it cannot be legally redistributed. To distribute the macOS version, first replace `node_modules/ffmpeg-static/ffmpeg` with a redistributable FFmpeg, then package.
+- **FFmpeg license**: Distributing an installer means distributing the FFmpeg inside it, which requires including the GPL license and providing a way to obtain the source code; the files in `build/ffmpeg` cover this. The FFmpeg that ffmpeg-static downloads on Apple silicon Macs was compiled with `--enable-nonfree`, and `ffmpeg -L` shows that it cannot be legally redistributed, so on these Macs the script downloads a GPL static build published by the [Shaka Project](https://github.com/shaka-project/static-ffmpeg-binaries) instead and verifies its checksum. That build requires macOS 15 or later, so the Apple silicon installer does too; the Intel installer works on macOS 13 and later.
+- **Releasing**: Push a tag such as `v1.0.0` that matches the version in `package.json`. GitHub Actions (`.github/workflows/release.yml`) then runs the tests with the FFmpeg to be bundled, builds the installers on Windows, macOS (Apple silicon and Intel) and Linux, and creates a draft release with the installers and their checksums. Add what's new to the draft, then publish it. You can also run the workflow manually from the Actions page: it then only builds, and the installers are in the run's artifacts.
 
 ## Project structure
 
@@ -159,7 +173,10 @@ tests/
 ├── helpers/       Test media, plus checks that can be done with FFmpeg alone
 └── setup/         Generates test media
 build/icon.png     App icon
+build/ffmpeg/      FFmpeg's license and where to get its source code, included in the installers
+scripts/           Prepares the FFmpeg bundled into the installers
 docs/              Screenshots used in the README
+.github/           Release workflow: builds the installers and creates a draft release
 ```
 
 The UI runs in a sandbox and can't use Node.js directly; it can only call the few methods provided by the preload script, and the main process validates every argument it receives. The packaged pages have a Content Security Policy that only loads the app's own scripts and styles.
