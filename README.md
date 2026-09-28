@@ -4,23 +4,29 @@ English | [简体中文](README.zh-CN.md)
 
 A desktop app for “video dedup” (视频去重). Rather than finding duplicate files, it makes subtle changes to a video, such as mirroring, color channel shifts, and slight timing adjustments, and writes random information into the file, so that the output differs from the original both in its frames and as a file. Video processing is done by FFmpeg.
 
-Built with Electron + React + TypeScript. The user interface is currently available in Simplified Chinese only.
+Built with Electron + React + TypeScript.
 
 > This is an experimental project developed for learning and research, open-sourced under the [MIT License](LICENSE). Do not use it for anything illegal or that infringes on the rights of others. Please read the [Disclaimer](#disclaimer) before use.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshot-en-dark.png">
+  <img alt="The main window after processing a video: file details, the original and new MD5, the selected features and the processing log" src="docs/screenshot-en-light.png">
+</picture>
 
 ## Features
 
 | Feature | Effect | FFmpeg implementation |
 | --- | --- | --- |
-| Mirror (水平镜像) | Flips the picture horizontally | `hflip` |
-| RGB shift (RGB偏移) | Shifts the red channel right and the blue channel down by 1 pixel, leaving green in place, so any two channels are at most 1 pixel apart horizontally and vertically | `rgbashift` |
-| Time jump (时间跳跃) | Nudges each frame's display time back and forth along a sine wave (up to ±0.04 s, with a period of 8 s) without changing the number of frames | `settb` + `setpts` |
-| Change MD5 (修改MD5值) | Writes a random comment and does not carry over the original title and date; when it is the only feature selected, the audio and video streams are copied without re-encoding | `-metadata`, `-c copy` |
-| Mask invert (蒙版倒置) | Overlays a semi-transparent color-inverted layer with adjustable opacity (0.03 by default) | `lutyuv` |
-| Frame dropping (视频抽帧) | Drops 1 frame every N frames, or at random intervals of N to N+5 frames | `select` |
+| Mirror | Flips the picture horizontally | `hflip` |
+| RGB shift | Shifts the red channel right and the blue channel down by 1 pixel, leaving green in place, so any two channels are at most 1 pixel apart horizontally and vertically | `rgbashift` |
+| Time jump | Nudges each frame's display time back and forth along a sine wave (up to ±0.04 s, with a period of 8 s) without changing the number of frames | `settb` + `setpts` |
+| Change MD5 | Writes a random comment and does not carry over the original title and date; when it is the only feature selected, the audio and video streams are copied without re-encoding | `-metadata`, `-c copy` |
+| Invert mask | Overlays a semi-transparent color-inverted layer with adjustable opacity (0.03 by default) | `lutyuv` |
+| Drop frames | Drops 1 frame every N frames, or at random intervals of N to N+5 frames | `select` |
 
 Time jump and Change MD5 are enabled by default.
 
+- English and Simplified Chinese interface: follows the system language by default and can be switched in the top-right corner, with your choice remembered
 - Light, dark, and system appearance, with your last choice remembered
 - Drop a video anywhere on the window to select it; the app shows its duration, resolution, frame rate, codecs, and original MD5
 - Shows progress, speed, and estimated time remaining while processing, and can be cancelled at any time; when finished, shows the new file's MD5 and can reveal the file in Finder or File Explorer
@@ -97,11 +103,12 @@ The FFmpeg builds that ffmpeg-static provides for each platform all include the 
 
 `pnpm test` first generates test media with the current FFmpeg (cached in the system temp directory), then checks the following, item by item:
 
-- Positions and intervals of dropped frames, how mask invert changes the picture, and the actual displacement of each color channel after RGB shift
+- Positions and intervals of dropped frames, how Invert mask changes the picture, and the actual displacement of each color channel after RGB shift
 - Output pixel format, per-frame timestamps after time jump, and no frames lost from variable-frame-rate videos
 - Containers, covers, and audio for each format, audio/video sync, and written metadata
 - Portrait videos with rotation metadata, videos with subtitles, very short videos, and file names containing spaces, Chinese, and special characters
 - Error messages, and no leftover files or processes after cancellation
+- All interface text lives in the Chinese and English dictionaries, with no hard-coded Chinese left in the source
 
 To test with a different FFmpeg:
 
@@ -116,6 +123,7 @@ VIDEO_DEDUP_FFMPEG=/opt/homebrew/bin/ffmpeg pnpm test
 - Cancelling, and closing the window during processing
 - Keyboard shortcuts, menus, copying the MD5, and showing the file in Finder
 - Switching appearance, a corrupted settings file, and launching a second instance
+- Switching between English and Chinese: the interface, window title, dialogs and menus change, and the choice is kept after reopening
 - The UI can't use Node.js directly or navigate to other pages
 
 The tests use a separate user data directory, so they don't change your local settings, and they never actually open Finder or modify the clipboard.
@@ -141,7 +149,7 @@ src/
 │   ├── probe.ts       Reads duration, resolution, codecs, and other information
 │   ├── ffmpeg.ts      Locates FFmpeg and reads its version and encoders
 │   └── files.ts       MD5, default output path
-├── shared/        Shared by the main process and the UI: option definitions and validation, feature descriptions, IPC interfaces
+├── shared/        Shared by the main process and the UI: option definitions and validation, interface text in Chinese and English (i18n/), IPC interfaces
 ├── main/          Electron main process: window, menu, dialogs, processing jobs, appearance settings
 ├── preload/       Exposes window.api to the UI
 └── renderer/      React UI (header, video file, dedup features, processing, log)
@@ -151,6 +159,7 @@ tests/
 ├── helpers/       Test media, plus checks that can be done with FFmpeg alone
 └── setup/         Generates test media
 build/icon.png     App icon
+docs/              Screenshots used in the README
 ```
 
 The UI runs in a sandbox and can't use Node.js directly; it can only call the few methods provided by the preload script, and the main process validates every argument it receives. The packaged pages have a Content Security Policy that only loads the app's own scripts and styles.
