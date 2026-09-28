@@ -1,5 +1,32 @@
+# 依赖
 node_modules/
+
+# 构建产物：electron-vite 输出到 out/，electron-builder 输出到 dist/。
+# build/ 里是程序图标，需要提交
 out/
 dist/
+
+# 日志
 *.log
+
+# 视频文件（程序支持的全部格式）：测试素材由 FFmpeg 在系统临时目录中生成，仓库里不需要视频。
+# 手动试用时放进项目的视频、处理结果（默认保存在原视频旁边）和处理中断后残留的临时文件都会被排除，
+# 确实要提交某个视频时用 git add -f
+*.mp4
+*.m4v
+*.mov
+*.mkv
+*.webm
+*.avi
+*.flv
+*.wmv
+
+# 系统生成的文件
 .DS_Store
+Thumbs.db
+desktop.ini
+
+# 编辑器和本地工具的个人设置
+.idea/
+.vscode/
+.claude/settings.local.json
