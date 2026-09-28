@@ -1,0 +1,10 @@
+# pnpm 11 默认不运行依赖包的安装脚本，没有在这里列出的会让 pnpm install 报错退出。
+# - ffmpeg-static：安装时下载 FFmpeg
+# - esbuild：安装时检查本机的可执行文件
+# - electron：Electron 44 在第一次运行时才下载程序，没有安装脚本，但 pnpm 仍要求在这里列出
+# - electron-winstaller：只在打包 Squirrel 格式的 Windows 安装包时用到，本项目不需要，不运行它的脚本
+allowBuilds:
+  ffmpeg-static: true
+  esbuild: true
+  electron: true
+  electron-winstaller: false

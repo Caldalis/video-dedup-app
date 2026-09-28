@@ -1,0 +1,82 @@
+// 处理参数的定义、默认值和校验。界面和主进程共用，不依赖 Node 或浏览器 API
+
+// 时间跳跃：画面时间轴按正弦规律前后偏移的最大幅度（秒）和周期（秒）。
+// 播放速度随之在 ±2π×0.04/8 ≈ ±3% 之间波动，0.04 秒的音画偏差低于人能察觉的程度
+export const TIME_JUMP_AMPLITUDE = 0.04
+export const TIME_JUMP_PERIOD = 8
+
+// 视频抽帧的随机间隔：在“设定值”到“设定值 + 5”帧之间
+export const SAMPLING_RANDOM_RANGE = 6
+
+export interface FeatureOptions {
+  mirror: boolean
+  rgbShift: boolean
+  timeJump: boolean
+  md5Change: boolean
+  maskInvert: boolean
+  /** 反色蒙版的不透明度，大于 0、不超过 1 */
+  maskOpacity: number
+  frameSampling: boolean
+  /** 每隔多少帧抽掉 1 帧，不小于 2 */
+  samplingInterval: number
+  samplingRandom: boolean
+}
+
+export interface ProcessingOptions extends FeatureOptions {
+  inputPath: string
+  outputPath: string
+}
+
+/** 默认开启的功能：“时间跳跃”和“修改MD5值” */
+export const DEFAULT_FEATURES: Readonly<FeatureOptions> = {
+  mirror: false,
+  rgbShift: false,
+  timeJump: true,
+  md5Change: true,
+  maskInvert: false,
+  maskOpacity: 0.03,
+  frameSampling: false,
+  samplingInterval: 5,
+  samplingRandom: true,
+}
+
+export const FEATURE_KEYS = ['mirror', 'rgbShift', 'timeJump', 'md5Change', 'maskInvert', 'frameSampling'] as const
+export type FeatureKey = (typeof FEATURE_KEYS)[number]
+
+export const OPACITY_ERROR = '蒙版倒置的不透明度需要是大于 0、不超过 1 的数字，例如 0.03'
+export const INTERVAL_ERROR = '视频抽帧的间隔需要是不小于 2 的整数，例如 5'
+
+/** 解析输入框中的不透明度，格式不对时返回 NaN */
+export function parseOpacity(text: string): number {
+  return text.trim() === '' ? Number.NaN : Number(text)
+}
+
+/** 解析输入框中的抽帧间隔，不是整数时返回 NaN */
+export function parseInterval(text: string): number {
+  return /^\s*\d+\s*$/.test(text) ? Number.parseInt(text, 10) : Number.NaN
+}
+
+export function isValidOpacity(value: number): boolean {
+  return value > 0 && value <= 1
+}
+
+export function isValidInterval(value: number): boolean {
+  return Number.isSafeInteger(value) && value >= 2
+}
+
+export function countSelected(features: FeatureOptions): number {
+  return FEATURE_KEYS.filter((key) => features[key]).length
+}
+
+/** 检查功能选项，返回第一个问题的说明；没有问题时返回 null */
+export function validateFeatures(features: FeatureOptions): string | null {
+  if (countSelected(features) === 0) return '还没有开启任何功能'
+  if (features.maskInvert && !isValidOpacity(features.maskOpacity)) return OPACITY_ERROR
+  if (features.frameSampling && !isValidInterval(features.samplingInterval)) return INTERVAL_ERROR
+  return null
+}
+
+/** 只勾选“修改MD5值”时直接复制音视频流，不重新编码 */
+export function isCopyOnly(features: FeatureOptions): boolean {
+  return features.md5Change && countSelected(features) === 1
+}

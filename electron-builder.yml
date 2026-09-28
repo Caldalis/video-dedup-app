@@ -1,0 +1,39 @@
+# 打包配置：pnpm dist 生成安装包，pnpm dist:dir 只生成可直接运行的程序目录
+appId: app.videodedup.desktop
+productName: 视频去重工具
+# 安装包文件名只用英文，避免在网盘、下载工具中出现乱码
+artifactName: video-dedup-${version}-${os}-${arch}.${ext}
+directories:
+  output: dist
+  buildResources: build
+# 程序只需要构建结果：界面和主进程用到的依赖都已打包进 out 目录
+files:
+  - out/**
+  - package.json
+# FFmpeg 放在 resources/ffmpeg 目录中（程序按这个位置查找）。
+# ffmpeg-static 只下载当前系统的 FFmpeg，所以每个系统的安装包需要在对应的系统上打包
+extraResources:
+  - from: node_modules/ffmpeg-static
+    to: ffmpeg
+    filter:
+      - ffmpeg
+      - ffmpeg.exe
+      - ffmpeg.LICENSE
+      - ffmpeg.README
+mac:
+  category: public.app-category.video
+  target: [dmg, zip]
+  # 没有开发者证书时做 ad-hoc 签名：签名完整时，别人下载后 macOS 提示“无法验证开发者”，可以在
+  # “系统设置 → 隐私与安全性”中选择仍要打开；不签名时会提示“已损坏”，无法打开。
+  # ad-hoc 签名不能与 hardened runtime 一起使用。有 Developer ID 证书时，打包时指定
+  # -c.mac.identity="证书名称" -c.mac.hardenedRuntime=true，并按 electron-builder 的说明做公证
+  identity: "-"
+  hardenedRuntime: false
+win:
+  target: nsis
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+linux:
+  target: AppImage
+  category: AudioVideo
