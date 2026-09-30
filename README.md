@@ -36,6 +36,7 @@ The installers aren't signed with a paid developer certificate, so the system sh
 | Change MD5 | Writes a random comment and does not carry over the original title and date; when it is the only feature selected, the audio and video streams are copied without re-encoding | `-metadata`, `-c copy` |
 | Invert mask | Overlays a semi-transparent color-inverted layer with adjustable opacity (0.03 by default) | `lutyuv` |
 | Drop frames | Drops 1 frame every N frames, or at random intervals of N to N+5 frames | `select` |
+| Remove audio | Deletes the audio track, including background music and voices; when no feature changes the picture, the video stream is copied without re-encoding | `-an` |
 
 Time jump and Change MD5 are enabled by default.
 

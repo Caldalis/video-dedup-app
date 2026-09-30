@@ -230,6 +230,53 @@ describe('只修改MD5值', () => {
   })
 })
 
+describe('去除声音', () => {
+  it('不改动画面时直接复制视频流（逐包相同），输出没有音轨，仍然嵌入封面', async () => {
+    const { out, stages, logs } = await run('s30.mp4', 'mute_copy.mp4', { md5Change: true, removeAudio: true })
+    const source = fixture('s30.mp4')
+    expect(stages).toContain('copy')
+    expect(stages).not.toContain('encode')
+    expect(logs).toContain('效果：去除声音，输出的视频不带音轨')
+    expect(streamMd5(out, 'v:0')).toBe(streamMd5(source, 'v:0'))
+    expect(audioCodecs(out)).toEqual([])
+    expect(inspectFile(out).streams.filter((s) => s.attachedPic)).toHaveLength(1)
+    expect(fileMd5(out)).not.toBe(fileMd5(source))
+  })
+
+  it('和改动画面的功能一起使用：重新编码画面，输出没有音轨', async () => {
+    const { out, stages } = await run('s30.mp4', 'mute_encode.mkv', { mirror: true, removeAudio: true })
+    expect(stages).toContain('encode')
+    expect(audioCodecs(out)).toEqual([])
+    expect(inspectFile(out).streams.filter((s) => s.type === 'Video' && !s.attachedPic)).toHaveLength(1)
+  })
+
+  it('无法直接复制（WMV→MP4）改为重新编码时，输出同样没有音轨', async () => {
+    const { out, logs } = await run('in.wmv', 'mute_wmv.mp4', { removeAudio: true })
+    expect(logs.some((line) => line.includes('改为重新编码'))).toBe(true)
+    expect(audioCodecs(out)).toEqual([])
+  })
+
+  it('输出 WebM 时不需要音频编码器：缺少 libopus / libvorbis 也能处理', async () => {
+    class NoWebmAudioProcessor extends VideoProcessor {
+      protected override async availableEncoders(): Promise<ReadonlySet<string>> {
+        const all = await super.availableEncoders()
+        return new Set([...all].filter((name) => name !== 'libopus' && name !== 'libvorbis'))
+      }
+    }
+    const { out } = await run('s30.mp4', 'mute.webm', { mirror: true, removeAudio: true }, NoWebmAudioProcessor)
+    expect(matroskaDocType(out)).toBe('webm')
+    expect(audioCodecs(out)).toEqual([])
+  })
+
+  it('原视频本来就没有声音时也能处理', async () => {
+    const silent = await run('s30.mp4', 'silent_src.mp4', { removeAudio: true })
+    const out = path.join(OUT, 'silent_again.mp4')
+    rmSync(out, { force: true })
+    await new VideoProcessor(FFMPEG).run({ ...NONE, mirror: true, removeAudio: true, inputPath: silent.out, outputPath: out })
+    expect(audioCodecs(out)).toEqual([])
+  })
+})
+
 describe('各种输出格式', () => {
   it.each(['.mp4', '.m4v', '.mov', '.mkv', '.webm', '.avi', '.flv', '.wmv'])(
     '%s：实际封装格式与扩展名一致，只为支持的格式嵌入封面，音频能复制就复制',

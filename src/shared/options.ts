@@ -20,6 +20,8 @@ export interface FeatureOptions {
   /** 每隔多少帧抽掉 1 帧，不小于 2 */
   samplingInterval: number
   samplingRandom: boolean
+  /** 去除声音：输出的视频不带音轨 */
+  removeAudio: boolean
 }
 
 export interface ProcessingOptions extends FeatureOptions {
@@ -38,10 +40,14 @@ export const DEFAULT_FEATURES: Readonly<FeatureOptions> = {
   frameSampling: false,
   samplingInterval: 5,
   samplingRandom: true,
+  removeAudio: false,
 }
 
-export const FEATURE_KEYS = ['mirror', 'rgbShift', 'timeJump', 'md5Change', 'maskInvert', 'frameSampling'] as const
+export const FEATURE_KEYS = ['mirror', 'rgbShift', 'timeJump', 'md5Change', 'maskInvert', 'frameSampling', 'removeAudio'] as const
 export type FeatureKey = (typeof FEATURE_KEYS)[number]
+
+/** 不改动画面的功能：只勾选这些时不需要重新编码视频 */
+const COPY_FEATURES: readonly FeatureKey[] = ['md5Change', 'removeAudio']
 
 /** 功能选项的问题：没有开启任何功能、不透明度不对、抽帧间隔不对。说明文字在界面文字的 problems 中 */
 export type FeatureProblem = 'noFeatures' | 'opacity' | 'interval'
@@ -76,7 +82,8 @@ export function validateFeatures(features: FeatureOptions): FeatureProblem | nul
   return null
 }
 
-/** 只勾选“修改MD5值”时直接复制音视频流，不重新编码 */
+/** 只勾选“修改MD5值”“去除声音”时直接复制视频流，不重新编码 */
 export function isCopyOnly(features: FeatureOptions): boolean {
-  return features.md5Change && countSelected(features) === 1
+  const selected = FEATURE_KEYS.filter((key) => features[key])
+  return selected.length > 0 && selected.every((key) => COPY_FEATURES.includes(key))
 }

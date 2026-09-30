@@ -45,6 +45,7 @@ function readOptions(raw: unknown): ProcessingOptions {
     frameSampling,
     samplingInterval: frameSampling ? number('samplingInterval') : DEFAULT_FEATURES.samplingInterval,
     samplingRandom: flag('samplingRandom'),
+    removeAudio: flag('removeAudio'),
   }
 }
 

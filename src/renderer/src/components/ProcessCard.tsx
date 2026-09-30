@@ -178,13 +178,15 @@ export function ProcessCard(props: ProcessCardProps) {
   } else {
     const copyOnly = isCopyOnly(features)
     const codec = extname(outputPath) === '.webm' ? 'VP9' : 'H.264'
+    const muted = features.removeAudio
+    const detail = copyOnly ? (muted ? text.copyMuted : text.copyOnly) : muted ? text.reencodeMuted(codec) : text.reencode(codec)
     body = (
       <>
         <StatusHeader
           tone="ready"
           icon={<Sparkles size={20} />}
           title={text.ready}
-          detail={copyOnly ? text.copyOnly : text.reencode(codec)}
+          detail={detail}
         />
         <div className="chips">
           {selectedChips(features, t).map((chip) => (

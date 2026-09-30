@@ -133,6 +133,14 @@ export const en: Messages = {
           `With “Random interval” checked, the interval varies randomly between N and N+${SAMPLING_RANDOM_RANGE - 1} frames, ` +
           'so different frames are removed each time.',
       },
+      removeAudio: {
+        name: 'Remove audio',
+        summary: 'Delete the audio track, music and voices included',
+        detail:
+          'Removes all sound from the video, including background music, voices and sound effects, so the output has no ' +
+          'audio track; the picture is unaffected. When no feature that changes the picture is selected, ' +
+          'the video stream is copied without re-encoding, which is lossless and fast.',
+      },
     },
   },
 
@@ -172,7 +180,9 @@ export const en: Messages = {
     notReady: "Can't start yet",
     ready: 'Ready',
     copyOnly: "Change MD5 only: the streams are copied without re-encoding, so it's fast",
+    copyMuted: "The video stream is copied without re-encoding, so it's fast; the output has no audio",
     reencode: (codec) => `The video is re-encoded as ${codec}; the audio is copied whenever possible`,
+    reencodeMuted: (codec) => `The video is re-encoded as ${codec}; the output has no audio`,
     samplingChip: (name, from, to) => (to === null ? `${name} every ${from}` : `${name} every ${from}–${to}`),
     cancel: 'Cancel',
     starting: 'Preparing…',
@@ -291,7 +301,9 @@ export const en: Messages = {
     effectTimeJump: (amplitude, period) => `Effect: time jump, timeline offset of up to ±${amplitude} s with a period of ${period} s`,
     effectSamplingRandom: (from, to) => `Effect: drop frames, 1 frame at random intervals of ${from}–${to} frames`,
     effectSamplingFixed: (interval) => `Effect: drop frames, 1 frame every ${interval} frames`,
+    effectRemoveAudio: 'Effect: remove audio, the output has no audio track',
     copyOnly: 'Change MD5 only: copying the audio and video streams without re-encoding',
+    copyVideoOnly: 'The picture is unchanged: copying the video stream without re-encoding',
     copyFallback: (ext, message) => `Can't copy the streams directly into ${ext}; re-encoding instead: ${message}`,
     reencode: 'Re-encoding the video',
     aviTimeJump: 'Note: AVI can only record time in whole frames, so time jump offsets are rounded to whole frames',

@@ -169,14 +169,16 @@ export class VideoProcessor {
       const n = options.samplingInterval
       this.log(options.samplingRandom ? text.effectSamplingRandom(n, n + SAMPLING_RANDOM_RANGE - 1) : text.effectSamplingFixed(n))
     }
+    if (options.removeAudio) this.log(text.effectRemoveAudio)
   }
 
-  /** 只修改 MD5：直接复制音视频流并写入随机注释，不重新编码，画质无损、速度快 */
+  /** 画面不需要改动：直接复制音视频流（去除声音时只复制视频流）并写入随机注释，不重新编码，画质无损、速度快 */
   private async copyStreams(options: ProcessingOptions, info: MediaInfo, target: string): Promise<void> {
     this.setStage('copy')
-    this.log(this.text.copyOnly)
+    this.log(options.removeAudio ? this.text.copyVideoOnly : this.text.copyOnly)
+    const audio = options.removeAudio ? ['-an'] : []
     try {
-      await this.runFFmpeg(['-y', '-i', options.inputPath, '-c', 'copy', ...metadataArgs(), target], {
+      await this.runFFmpeg(['-y', '-i', options.inputPath, '-c', 'copy', ...audio, ...metadataArgs(), target], {
         duration: info.duration,
       })
     } catch (error) {
@@ -211,7 +213,9 @@ export class VideoProcessor {
     } else {
       args.push('-enc_time_base:v', '1/90000')
     }
-    if (info.hasAudio) {
+    if (options.removeAudio) {
+      args.push('-an')
+    } else if (info.hasAudio) {
       args.push(...(await this.audioCodecArgs(options.inputPath, ext, encoders)))
     }
     args.push(target)

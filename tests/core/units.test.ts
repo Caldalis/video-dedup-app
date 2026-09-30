@@ -42,10 +42,15 @@ describe('buildVideoFilters', () => {
     ])
   })
 
-  it('只勾选修改MD5值时没有滤镜（直接复制音视频流）', () => {
+  it('只勾选修改MD5值、去除声音时没有滤镜（直接复制视频流）', () => {
     expect(buildVideoFilters({ ...NONE, md5Change: true })).toEqual([])
+    expect(buildVideoFilters({ ...NONE, removeAudio: true })).toEqual([])
     expect(isCopyOnly({ ...NONE, md5Change: true })).toBe(true)
+    expect(isCopyOnly({ ...NONE, removeAudio: true })).toBe(true)
+    expect(isCopyOnly({ ...NONE, md5Change: true, removeAudio: true })).toBe(true)
+    expect(isCopyOnly({ ...NONE, mirror: true, removeAudio: true })).toBe(false)
     expect(isCopyOnly(DEFAULT_FEATURES)).toBe(false)
+    expect(isCopyOnly(NONE)).toBe(false)
   })
 
   it('随机抽帧：种子是 2^32 ~ 2^52 之间的整数，间隔为 N ~ N+5', () => {

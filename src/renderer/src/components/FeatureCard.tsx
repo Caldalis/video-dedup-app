@@ -1,4 +1,14 @@
-import { Blend, Contrast, FingerprintPattern, RotateCcw, Scissors, SlidersHorizontal, SquareSplitHorizontal, Timer } from 'lucide-react'
+import {
+  Blend,
+  Contrast,
+  FingerprintPattern,
+  RotateCcw,
+  Scissors,
+  SlidersHorizontal,
+  SquareSplitHorizontal,
+  Timer,
+  VolumeX,
+} from 'lucide-react'
 import type { ReactNode } from 'react'
 import {
   DEFAULT_FEATURES,
@@ -39,6 +49,7 @@ const ICONS: Record<FeatureKey, ReactNode> = {
   md5Change: <FingerprintPattern size={18} />,
   maskInvert: <Contrast size={18} />,
   frameSampling: <Scissors size={18} />,
+  removeAudio: <VolumeX size={18} />,
 }
 
 interface FeatureCardProps {

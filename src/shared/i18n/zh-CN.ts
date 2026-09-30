@@ -133,6 +133,13 @@ export const zhCN = {
           '每 N 帧去掉 1 帧（默认 N 为 5），去掉的位置由前一帧补上，声音不受影响。' +
           `勾选“随机间隔”时，间隔在 N 到 N+${SAMPLING_RANDOM_RANGE - 1} 帧之间随机变化，每次处理去掉的位置都不同。`,
       },
+      removeAudio: {
+        name: '去除声音',
+        summary: '删除整条音轨，背景音乐和人声一起去掉',
+        detail:
+          '删除视频中的全部声音，背景音乐、人声和音效都会去掉，输出的视频没有音轨，画面不受影响。' +
+          '没有勾选其他改动画面的功能时，直接复制视频流，不重新编码，画质无损、速度很快。',
+      },
     } satisfies Record<FeatureKey, FeatureText>,
   },
 
@@ -173,7 +180,9 @@ export const zhCN = {
     notReady: '还不能开始',
     ready: '准备就绪',
     copyOnly: '只修改MD5值：直接复制音视频流，不重新编码，速度很快',
+    copyMuted: '直接复制视频流，不重新编码，速度很快；输出的视频没有声音',
     reencode: (codec: string) => `画面重新编码为 ${codec}，声音能直接复制就不重新编码`,
+    reencodeMuted: (codec: string) => `画面重新编码为 ${codec}，输出的视频没有声音`,
     /** 已选功能中“视频抽帧”的标签，固定间隔时 to 为 null */
     samplingChip: (name: string, from: number, to: number | null) => (to === null ? `${name} ${from}帧` : `${name} ${from}~${to}帧`),
     cancel: '取消',
@@ -300,7 +309,9 @@ export const zhCN = {
     effectTimeJump: (amplitude: number, period: number) => `效果：时间跳跃，时间轴最多偏移 ±${amplitude} 秒，周期 ${period} 秒`,
     effectSamplingRandom: (from: number, to: number) => `效果：视频抽帧，每 ${from}~${to} 帧随机抽掉 1 帧`,
     effectSamplingFixed: (interval: number) => `效果：视频抽帧，每 ${interval} 帧抽掉 1 帧`,
+    effectRemoveAudio: '效果：去除声音，输出的视频不带音轨',
     copyOnly: '只修改MD5值：复制音视频流，不重新编码',
+    copyVideoOnly: '画面不需要改动：复制视频流，不重新编码',
     copyFallback: (ext: string, message: string) => `无法直接复制到 ${ext} 格式，改为重新编码：${message}`,
     reencode: '重新编码视频画面',
     aviTimeJump: '提示：AVI 只能以整帧为单位记录时间，时间跳跃的偏移会按帧取整',
