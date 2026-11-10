@@ -1,7 +1,7 @@
 {
   "name": "video-dedup-app",
   "productName": "视频去重工具",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "基于 FFmpeg 的视频去重桌面工具（Electron + React + TypeScript）",
   "private": true,
   "type": "module",
