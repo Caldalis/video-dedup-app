@@ -21,6 +21,7 @@ const api: Api = {
   setLanguage: (value) => ipcRenderer.invoke(IPC.setLanguage, value),
   chooseInput: () => ipcRenderer.invoke(IPC.chooseInput),
   chooseOutput: (current) => ipcRenderer.invoke(IPC.chooseOutput, current),
+  chooseOutputDir: () => ipcRenderer.invoke(IPC.chooseOutputDir),
   inspectInput: (path) => ipcRenderer.invoke(IPC.inspectInput, path),
   md5: (path, slot) => ipcRenderer.invoke(IPC.md5, path, slot),
   cancelMd5: async (slot) => {

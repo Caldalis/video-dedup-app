@@ -57,17 +57,28 @@ export const zhCN = {
   file: {
     title: '视频文件',
     change: '更换',
+    add: '添加文件…',
     dropTitle: '拖入视频文件，或点击选择',
-    dropHint: '支持 MP4、MOV、MKV、AVI、WMV、FLV、WebM 等格式',
+    dropHint: '支持 MP4、MOV、MKV、AVI、WMV、FLV、WebM 等格式，可以一次选择多个',
     loading: '正在读取视频信息…',
     remove: '移除文件',
     noAudio: '无声音',
     originalMd5: '原始 MD5',
     outputTo: '输出到',
+    outputDirDefault: '每个视频所在的目录（文件名末尾加 _dedup）',
+    resetOutputDir: '原目录',
     changeOutput: '更改…',
     md5Computing: '计算中…',
     md5Failed: '计算失败',
     copyMd5: '复制 MD5',
+    statuses: {
+      pending: '排队中',
+      running: '处理中',
+      ok: '完成',
+      failed: '失败',
+      cancelled: '已取消',
+      skipped: '未处理',
+    },
   },
 
   /** 选择的文件不能处理的原因 */
@@ -147,6 +158,8 @@ export const zhCN = {
   problems: {
     noInput: '还没有选择视频文件',
     loading: '正在读取视频信息…',
+    noOutput: '还没有设置输出位置',
+    invalidFiles: (count: number) => `有 ${count} 个文件无法处理，请移除后重试`,
     noFeatures: '还没有开启任何功能',
     opacity: '蒙版倒置的不透明度需要是大于 0、不超过 1 的数字，例如 0.03',
     interval: '视频抽帧的间隔需要是不小于 2 的整数，例如 5',
@@ -176,9 +189,25 @@ export const zhCN = {
     cancelled: '已取消',
     cancelledDetail: '未生成输出文件，已有的同名文件也没有被改动',
     waiting: '等待选择视频',
-    waitingDetail: '选择或拖入一个视频文件后即可开始处理',
+    waitingDetail: '选择或拖入一个或多个视频文件后即可开始处理',
     notReady: '还不能开始',
     ready: '准备就绪',
+    batchReady: (count: number) => `将依次处理 ${count} 个视频`,
+    batchOutput: (dir: string) => `输出到：${dir}`,
+    batchRunning: (index: number, total: number) => `正在处理第 ${index}/${total} 个视频`,
+    batchDoneTitle: '批量处理完成',
+    batchPartialTitle: '批量处理部分完成',
+    batchAllFailedTitle: '批量处理失败',
+    batchDoneDetail: (succeeded: number, failed: number, time: string) =>
+      failed > 0 ? `成功 ${succeeded} 个，失败 ${failed} 个，用时 ${time}` : `${succeeded} 个视频全部处理完成，用时 ${time}`,
+    batchAllFailedDetail: (total: number) => `${total} 个视频都处理失败，详细信息见处理日志`,
+    batchCancelledDetail: (succeeded: number, failed: number, remaining: number) => {
+      if (succeeded === 0 && failed === 0) return '未生成输出文件'
+      return failed > 0
+        ? `已完成 ${succeeded} 个，失败 ${failed} 个，其余 ${remaining} 个未完成；已完成的文件会保留`
+        : `已完成 ${succeeded} 个，其余 ${remaining} 个未完成；已完成的文件会保留`
+    },
+    batchRemaining: (time: string) => `当前视频还需 ${time}`,
     copyOnly: '只修改MD5值：直接复制音视频流，不重新编码，速度很快',
     copyMuted: '直接复制视频流，不重新编码，速度很快；输出的视频没有声音',
     reencode: (codec: string) => `画面重新编码为 ${codec}，声音能直接复制就不重新编码`,
@@ -207,12 +236,23 @@ export const zhCN = {
     md5Done: (slot: Md5Slot, value: string) => `${slot === 'input' ? '原文件' : '输出文件'} MD5：${value}`,
     md5Failed: (slot: Md5Slot, message: string) => `无法计算${slot === 'input' ? '原文件' : '输出文件'}的 MD5：${message}`,
     opened: (path: string) => `打开视频：${path}`,
+    openedMany: (count: number) => `打开 ${count} 个视频`,
     outputChanged: (path: string) => `输出位置改为：${path}`,
+    outputDirChanged: (path: string) => `输出文件夹改为：${path}`,
     cleared: '已清空，参数恢复为默认值',
     starting: '开始处理',
     cannotStart: (message: string) => `无法开始：${message}`,
     finished: (time: string) => `处理完成，用时 ${time}`,
     failed: (message: string) => `处理失败：${message}`,
+    batchFileFailed: (name: string, message: string) => `无法处理 ${name}：${message}`,
+    batchDone: (succeeded: number, failed: number, time: string) =>
+      failed > 0 ? `批量处理完成：${succeeded} 个成功，${failed} 个失败，用时 ${time}` : `批量处理完成：${succeeded} 个视频，用时 ${time}`,
+    batchCancelled: (succeeded: number, failed: number, remaining: number) => {
+      if (succeeded === 0 && failed === 0) return '已取消处理，未生成输出文件'
+      return failed > 0
+        ? `已取消处理：${succeeded} 个完成，${failed} 个失败，其余 ${remaining} 个未完成`
+        : `已取消处理：${succeeded} 个完成，其余 ${remaining} 个未完成`
+    },
     cancelled: '已取消处理，未生成输出文件',
     cancelling: '正在取消…',
     copied: '已复制到剪贴板',
@@ -241,14 +281,19 @@ export const zhCN = {
     videoFiles: '视频文件',
     allFiles: '所有文件',
     saveTitle: '选择输出位置',
+    outputDirTitle: '选择输出文件夹',
     extensionFiles: (ext: string) => `.${ext} 文件`,
     cancelJob: {
       message: '确定要取消当前的处理吗？',
       detail: '已经处理的部分会被丢弃，不会生成输出文件。',
+      batchDetail: '当前正在处理的文件会被丢弃，已经完成的文件会保留，其余文件不再处理。',
       confirm: '取消处理',
       keep: '继续处理',
     },
     overwrite: { message: '输出文件已存在，是否覆盖？', confirm: '覆盖', cancel: '取消' },
+    overwriteBatch: {
+      message: (count: number) => `有 ${count} 个输出文件已存在，是否全部覆盖？`,
+    },
     quit: { message: '正在处理视频，退出会取消当前的处理。确定要退出吗？', confirm: '退出', keep: '继续处理' },
   },
 
@@ -258,9 +303,11 @@ export const zhCN = {
     invalidPath: '无效的文件路径',
     busy: '正在处理其他视频，请等待处理完成',
     noInput: '还没有选择视频文件',
+    duplicateInputs: '文件列表中有重复的视频，请移除重复项',
     inputMissing: (path: string) => `找不到输入文件：\n${path}`,
     noOutput: '还没有设置输出位置',
     sameFile: '输出文件不能与输入文件相同，请选择其他输出路径',
+    outputMatchesInput: (path: string) => `输出文件不能与要处理的视频相同，请更换输出位置：\n${path}`,
     outputDirMissing: (dir: string) => `输出文件夹不存在：\n${dir}`,
   },
 
@@ -294,6 +341,7 @@ export const zhCN = {
 
   /** 处理核心写入日志的文字和错误信息 */
   processor: {
+    fileHeading: (index: number, total: number, name: string) => `第 ${index}/${total} 个视频：${name}`,
     input: (path: string) => `输入：${path}`,
     output: (path: string) => `输出：${path}`,
     cannotReadInput: (reason: string) => `无法读取输入文件：${reason}`,

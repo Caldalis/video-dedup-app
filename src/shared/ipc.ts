@@ -1,7 +1,7 @@
 // 主进程与界面之间的通信接口：通道名称、传递的数据，以及 preload 暴露给界面的 window.api
 import type { Language } from './i18n/language'
-import type { ProcessingOptions } from './options'
-import type { LogKind, MediaInfo, ProgressInfo, Stage } from './types'
+import type { StartOptions } from './options'
+import type { FileOutcome, LogKind, MediaInfo, ProgressInfo, Stage } from './types'
 
 export const IPC = {
   appInfo: 'app:info',
@@ -12,6 +12,7 @@ export const IPC = {
   setLanguage: 'language:set',
   chooseInput: 'dialog:choose-input',
   chooseOutput: 'dialog:choose-output',
+  chooseOutputDir: 'dialog:choose-output-dir',
   inspectInput: 'file:inspect',
   md5: 'file:md5',
   startJob: 'job:start',
@@ -65,7 +66,7 @@ export type Md5Result = { status: 'ok'; value: string } | { status: 'error'; mes
 export type Md5Slot = 'input' | 'output'
 
 export interface StartRequest {
-  options: ProcessingOptions
+  options: StartOptions
   /** 输出路径是在“另存为”对话框中选的：对话框已经确认过覆盖，不再询问 */
   overwriteConfirmed: boolean
 }
@@ -79,18 +80,26 @@ export type StartResponse =
   | { status: 'declined' }
 
 export type JobResult =
+  /** 单个文件处理成功 */
   | { status: 'ok'; outputPath: string; seconds: number }
-  | { status: 'cancelled' }
-  | { status: 'failed'; message: string }
+  /** 批量处理结束（可能有失败的文件），outcomes 中有每个文件的结果 */
+  | { status: 'batch'; outcomes: FileOutcome[]; seconds: number }
+  /** 取消：单个文件时不带 outcomes，批量时带上已处理和未处理的文件 */
+  | { status: 'cancelled'; outcomes?: FileOutcome[] }
+  | { status: 'failed'; message: string; outcomes?: FileOutcome[] }
 
 /**
  * 处理过程中的事件。处理结果也作为事件发送：同一通道上的消息按发送顺序到达，
- * 结果不会跑到最后几条日志前面
+ * 结果不会跑到最后几条日志前面。批量处理时，fileIndex 是当前文件在列表中的序号
  */
 export type JobEvent =
-  | { type: 'log'; message: string; kind: LogKind }
-  | { type: 'progress'; progress: ProgressInfo }
-  | { type: 'stage'; stage: Stage }
+  | { type: 'log'; message: string; kind: LogKind; fileIndex?: number }
+  | { type: 'progress'; progress: ProgressInfo; fileIndex?: number }
+  | { type: 'stage'; stage: Stage; fileIndex?: number }
+  /** 开始处理列表中的某个文件 */
+  | { type: 'fileStart'; index: number; inputPath: string; outputPath: string }
+  /** 列表中的某个文件处理结束 */
+  | { type: 'fileFinished'; outcome: FileOutcome }
   | { type: 'finished'; result: JobResult }
 
 export type MenuCommand = 'open'
@@ -103,10 +112,12 @@ export interface Api {
   setTheme(mode: ThemeMode): Promise<void>
   /** 切换界面语言：保存选择，并更新菜单等系统界面的文字 */
   setLanguage(language: Language): Promise<void>
-  /** 打开选择视频的对话框，取消时返回 null */
-  chooseInput(): Promise<string | null>
+  /** 打开选择视频的对话框，可以一次选择多个；取消时返回空数组 */
+  chooseInput(): Promise<string[]>
   /** 打开“另存为”对话框，取消时返回 null */
   chooseOutput(current: string): Promise<string | null>
+  /** 打开选择输出文件夹的对话框（批量处理），取消时返回 null */
+  chooseOutputDir(): Promise<string | null>
   inspectInput(path: string): Promise<InspectResult>
   md5(path: string, slot: Md5Slot): Promise<Md5Result>
   /** 停止这个位置上还没算完的 MD5 */

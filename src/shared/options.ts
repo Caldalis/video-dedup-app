@@ -29,6 +29,16 @@ export interface ProcessingOptions extends FeatureOptions {
   outputPath: string
 }
 
+/** 界面发来的开始处理请求：一个或多个视频，以及输出位置 */
+export interface StartOptions extends FeatureOptions {
+  /** 要处理的视频，按顺序依次处理 */
+  inputs: string[]
+  /** 只有一个文件时，用户在“另存为”中选择的输出路径 */
+  outputPath: string | null
+  /** 批量处理时的输出目录；null 表示输出到每个视频所在的目录 */
+  outputDir: string | null
+}
+
 /** 默认开启的功能：“时间跳跃”和“修改MD5值” */
 export const DEFAULT_FEATURES: Readonly<FeatureOptions> = {
   mirror: false,
@@ -86,4 +96,58 @@ export function validateFeatures(features: FeatureOptions): FeatureProblem | nul
 export function isCopyOnly(features: FeatureOptions): boolean {
   const selected = FEATURE_KEYS.filter((key) => features[key])
   return selected.length > 0 && selected.every((key) => COPY_FEATURES.includes(key))
+}
+
+/** 只保留各项功能选项，去掉输入、输出路径等处理目标 */
+export function pickFeatureOptions(options: FeatureOptions): FeatureOptions {
+  return {
+    mirror: options.mirror,
+    rgbShift: options.rgbShift,
+    timeJump: options.timeJump,
+    md5Change: options.md5Change,
+    maskInvert: options.maskInvert,
+    maskOpacity: options.maskOpacity,
+    frameSampling: options.frameSampling,
+    samplingInterval: options.samplingInterval,
+    samplingRandom: options.samplingRandom,
+    removeAudio: options.removeAudio,
+  }
+}
+
+/**
+ * 读取界面发来的开始处理请求。界面传来的参数不可信：逐项检查类型，缺少或类型不对的
+ * 按“未勾选”、无效值或空列表处理。兼容旧版只传 inputPath / outputPath 的单个文件请求
+ */
+export function readStartOptions(raw: unknown): StartOptions {
+  const data = (typeof raw === 'object' && raw !== null ? raw : {}) as Record<string, unknown>
+  const flag = (key: string) => data[key] === true
+  const text = (key: string) => (typeof data[key] === 'string' ? (data[key] as string) : '')
+  const number = (key: string) => (typeof data[key] === 'number' ? (data[key] as number) : Number.NaN)
+  const maskInvert = flag('maskInvert')
+  const frameSampling = flag('frameSampling')
+
+  const inputs = Array.isArray(data.inputs)
+    ? data.inputs.filter((value): value is string => typeof value === 'string' && value.length > 0)
+    : []
+  // 旧版请求没有 inputs，只有 inputPath
+  const legacyInput = text('inputPath')
+  if (inputs.length === 0 && legacyInput) inputs.push(legacyInput)
+
+  const outputPath = text('outputPath')
+  const outputDir = text('outputDir')
+  return {
+    inputs,
+    outputPath: outputPath || null,
+    outputDir: outputDir || null,
+    mirror: flag('mirror'),
+    rgbShift: flag('rgbShift'),
+    timeJump: flag('timeJump'),
+    md5Change: flag('md5Change'),
+    maskInvert,
+    maskOpacity: maskInvert ? number('maskOpacity') : DEFAULT_FEATURES.maskOpacity,
+    frameSampling,
+    samplingInterval: frameSampling ? number('samplingInterval') : DEFAULT_FEATURES.samplingInterval,
+    samplingRandom: flag('samplingRandom'),
+    removeAudio: flag('removeAudio'),
+  }
 }

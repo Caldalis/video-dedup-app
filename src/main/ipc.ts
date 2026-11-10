@@ -42,15 +42,27 @@ export function registerIpc(jobs: JobManager): void {
     if (isLanguage(language) && setLanguage(language)) rebuildMenu()
   })
 
-  ipcMain.handle(IPC.chooseInput, async (event) => {
+  ipcMain.handle(IPC.chooseInput, async (event): Promise<string[]> => {
     const text = t().dialogs
     const options: Electron.OpenDialogOptions = {
       title: text.openTitle,
-      properties: ['openFile'],
+      // 可以一次选择多个视频，批量处理
+      properties: ['openFile', 'multiSelections'],
       filters: [
         { name: text.videoFiles, extensions: VIDEO_EXTENSIONS },
         { name: text.allFiles, extensions: ['*'] },
       ],
+    }
+    const window = windowOf(event)
+    const result = window ? await dialog.showOpenDialog(window, options) : await dialog.showOpenDialog(options)
+    return result.canceled ? [] : result.filePaths
+  })
+
+  ipcMain.handle(IPC.chooseOutputDir, async (event): Promise<string | null> => {
+    const text = t().dialogs
+    const options: Electron.OpenDialogOptions = {
+      title: text.outputDirTitle,
+      properties: ['openDirectory', 'createDirectory'],
     }
     const window = windowOf(event)
     const result = window ? await dialog.showOpenDialog(window, options) : await dialog.showOpenDialog(options)
@@ -125,7 +137,7 @@ export function registerIpc(jobs: JobManager): void {
       defaultId: 1,
       cancelId: 1,
       message: text.dialogs.cancelJob.message,
-      detail: text.dialogs.cancelJob.detail,
+      detail: jobs.batch ? text.dialogs.cancelJob.batchDetail : text.dialogs.cancelJob.detail,
     }
     const window = windowOf(event)
     const { response } = window ? await dialog.showMessageBox(window, box) : await dialog.showMessageBox(box)

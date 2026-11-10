@@ -43,6 +43,7 @@ Time jump and Change MD5 are enabled by default.
 - English and Simplified Chinese interface: follows the system language by default and can be switched in the top-right corner, with your choice remembered
 - Light, dark, and system appearance, with your last choice remembered
 - Drop a video anywhere on the window to select it; the app shows its duration, resolution, frame rate, codecs, and original MD5
+- Batch processing: choose or drop several videos at once and they are processed one by one; all outputs can go to one folder, each file shows its own status, and a failed file doesn't stop the rest
 - Shows progress, speed, and estimated time remaining while processing, and can be cancelled at any time; when finished, shows the new file's MD5 and can reveal the file in Finder or File Explorer
 - Audio is copied without re-encoding whenever possible; MP4, M4V, and MKV outputs get an embedded cover thumbnail; WebM output uses VP9 + Opus
 - Results are written to a temporary file first and renamed to the output file only after everything succeeds, so a failure or cancellation never leaves a partial file behind or damages an existing file with the same name
@@ -121,6 +122,7 @@ The FFmpeg builds that ffmpeg-static provides for each platform all include the 
 - Output pixel format, per-frame timestamps after time jump, and no frames lost from variable-frame-rate videos
 - Containers, covers, and audio for each format, audio/video sync, and written metadata
 - Portrait videos with rotation metadata, videos with subtitles, very short videos, and file names containing spaces, Chinese, and special characters
+- Batch processing: every file is processed in order, a failed file doesn't stop the rest, cancellation stops the remaining files, and outputs with the same name don't overwrite each other
 - Error messages, and no leftover files or processes after cancellation
 - All interface text lives in the Chinese and English dictionaries, with no hard-coded Chinese left in the source
 
@@ -133,6 +135,7 @@ VIDEO_DEDUP_FFMPEG=/opt/homebrew/bin/ffmpeg pnpm test
 `pnpm test:e2e` launches the built app, with the tests answering system dialogs in place of the user, and checks the following operations:
 
 - Choosing files, dropping files, and choosing files that can't be processed
+- Batch processing: multiple selection, a custom output folder, batch cancellation, and one overwrite confirmation for all files
 - Option validation, processing, processing failures, and overwrite confirmation
 - Cancelling, and closing the window during processing
 - Keyboard shortcuts, menus, copying the MD5, and showing the file in Finder
@@ -160,6 +163,7 @@ pnpm dist
 src/
 ├── core/          Processing core: calls FFmpeg, depends only on Node.js, independent of the UI
 │   ├── processor.ts   VideoProcessor: re-encoding or stream copying, cover embedding, temp files, cancellation
+│   ├── batch.ts       BatchProcessor: processes several videos in order, output path planning, per-file results
 │   ├── filters.ts     FFmpeg filters for each feature
 │   ├── probe.ts       Reads duration, resolution, codecs, and other information
 │   ├── ffmpeg.ts      Locates FFmpeg and reads its version and encoders

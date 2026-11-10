@@ -35,6 +35,39 @@ export type LogKind = 'info' | 'command' | 'ffmpeg'
 /** 处理进行到的步骤：读取视频信息、重新编码、直接复制音视频流、嵌入封面、保存 */
 export type Stage = 'probe' | 'encode' | 'copy' | 'cover' | 'finalize'
 
+/** 批量处理中每个文件的状态：等待处理、正在处理、成功、失败、取消、因取消而未处理 */
+export type FilePhase = 'pending' | 'running' | 'ok' | 'failed' | 'cancelled' | 'skipped'
+
+/** 一个文件在批量处理中的最终结果 */
+export interface FileOutcome {
+  /** 在本次处理列表中的序号，从 0 开始 */
+  index: number
+  inputPath: string
+  outputPath: string
+  status: Exclude<FilePhase, 'pending' | 'running'>
+  /** status 为 failed 时的原因 */
+  message?: string
+  /** status 为 ok 时的用时（秒） */
+  seconds?: number
+}
+
+/** 汇总批量处理结果：成功、失败，以及取消或跳过的文件 */
+export function countOutcomes(outcomes: readonly FileOutcome[]): {
+  succeeded: number
+  failed: number
+  remaining: number
+} {
+  let succeeded = 0
+  let failed = 0
+  let remaining = 0
+  for (const outcome of outcomes) {
+    if (outcome.status === 'ok') succeeded++
+    else if (outcome.status === 'failed') failed++
+    else remaining++
+  }
+  return { succeeded, failed, remaining }
+}
+
 export interface ProgressInfo {
   /** 0~100 的整数，不知道视频时长时为 null */
   percent: number | null

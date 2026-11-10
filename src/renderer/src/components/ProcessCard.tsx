@@ -16,19 +16,23 @@ import {
 import type { ReactNode } from 'react'
 import type { Messages } from '../../../shared/i18n'
 import { FEATURE_KEYS, SAMPLING_RANDOM_RANGE, isCopyOnly, type FeatureOptions } from '../../../shared/options'
-import type { Stage } from '../../../shared/types'
+import { countOutcomes, type FileOutcome, type FilePhase, type Stage } from '../../../shared/types'
 import { basename, extname, formatDuration, formatElapsed, formatSpeed } from '../lib/format'
 import { useNow } from '../lib/hooks'
 import { useI18n } from '../lib/i18n'
 import { Md5Value, type HashState } from './FileCard'
-import { Button, Card, ProgressBar, cx } from './ui'
+import { Button, Card, IconButton, ProgressBar, cx } from './ui'
 
 export type JobState =
   | { phase: 'idle' }
   /** 已请求开始，主进程还在检查参数或询问是否覆盖 */
-  | { phase: 'starting' }
+  | { phase: 'starting'; total: number; statuses: FilePhase[] }
   | {
       phase: 'running'
+      total: number
+      statuses: FilePhase[]
+      /** 正在处理的文件序号，从 0 开始 */
+      index: number
       stage: Stage
       percent: number | null
       time: number
@@ -37,17 +41,24 @@ export type JobState =
       cancelling: boolean
     }
   | { phase: 'done'; outputPath: string; seconds: number }
+  | { phase: 'batchDone'; outcomes: FileOutcome[]; seconds: number }
   | { phase: 'failed'; message: string }
-  | { phase: 'cancelled' }
+  | { phase: 'cancelled'; outcomes?: FileOutcome[] }
+
+interface InputSummary {
+  name: string
+  duration: number | null
+}
 
 interface ProcessCardProps {
   job: JobState
   /** 不能开始处理的原因，可以开始时为 null */
   problem: string | null
-  hasInput: boolean
+  inputs: InputSummary[]
   features: FeatureOptions
   outputPath: string
-  duration: number | null
+  /** 批量处理的输出文件夹，null 表示输出到原目录 */
+  outputDir: string | null
   outputMd5: HashState
   /** 系统平台，决定“在访达中显示”按钮上文件管理器的名称 */
   platform: string | undefined
@@ -85,16 +96,55 @@ function StatusHeader({ tone, icon, title, detail }: { tone: string; icon: React
   )
 }
 
+function BatchResults({
+  outcomes,
+  platform,
+  onShowInFolder,
+}: {
+  outcomes: FileOutcome[]
+  platform: string | undefined
+  onShowInFolder: (path: string) => void
+}) {
+  const { t } = useI18n()
+  return (
+    <div className="batch-results">
+      {outcomes.map((outcome) => (
+        <div className="batch-result" key={`${outcome.index}-${outcome.inputPath}`}>
+          <span className={cx('batch-result-dot', `is-${outcome.status}`)} />
+          <div className="batch-result-main">
+            <div className="batch-result-name" title={outcome.status === 'ok' ? outcome.outputPath : outcome.inputPath}>
+              {basename(outcome.status === 'ok' ? outcome.outputPath : outcome.inputPath)}
+            </div>
+            {outcome.status === 'failed' && outcome.message && (
+              <div className="batch-result-message">{outcome.message}</div>
+            )}
+          </div>
+          <span className={cx('batch-result-status', `is-${outcome.status}`)}>{t.file.statuses[outcome.status]}</span>
+          {outcome.status === 'ok' && (
+            <IconButton label={t.process.showInFolder(platform)} onClick={() => onShowInFolder(outcome.outputPath)}>
+              <FolderSearch size={14} />
+            </IconButton>
+          )}
+        </div>
+      ))}
+    </div>
+  )
+}
+
 export function ProcessCard(props: ProcessCardProps) {
-  const { job, problem, hasInput, features, outputPath, duration, outputMd5 } = props
+  const { job, problem, inputs, features, outputPath, outputDir, outputMd5 } = props
   const { t } = useI18n()
   const text = t.process
+  const batch = inputs.length > 1
+  const hasInput = inputs.length > 0
   const running = job.phase === 'running'
   const busy = running || job.phase === 'starting'
   const now = useNow(running)
 
   let body: ReactNode
   if (job.phase === 'running') {
+    const current = inputs[job.index] ?? inputs[0]
+    const duration = current?.duration ?? null
     const elapsed = (now - job.startedAt) / 1000
     const remaining =
       duration && job.speed && job.speed > 0
@@ -103,18 +153,34 @@ export function ProcessCard(props: ProcessCardProps) {
           ? (elapsed * (100 - job.percent)) / job.percent
           : null
     const showPercent = job.stage === 'encode' || job.stage === 'copy'
+    const completed = job.statuses.filter((status) => status !== 'pending' && status !== 'running').length
+    const overall =
+      job.percent === null ? null : Math.min(100, Math.round(((completed + job.percent / 100) / job.total) * 100))
+    const displayPercent = batch ? overall : job.percent
+    // 批量处理时，封面、保存等阶段也要显示整批的进度，而不是每个文件都显示 100%
+    const barPercent = batch ? overall : showPercent ? job.percent : job.stage === 'probe' ? null : 100
     body = (
       <>
         <StatusHeader
           tone="running"
           icon={<LoaderCircle size={20} className="spin" />}
-          title={job.cancelling ? text.cancelling : `${text.stages[job.stage]}…`}
-          detail={basename(outputPath)}
+          title={
+            job.cancelling
+              ? text.cancelling
+              : batch
+                ? text.batchRunning(job.index + 1, job.total)
+                : `${text.stages[job.stage]}…`
+          }
+          detail={batch ? current?.name : basename(outputPath)}
         />
         <div className="progress-block">
           <div className="progress-numbers">
             <span className="progress-percent">
-              {showPercent && job.percent !== null ? `${job.percent}%` : job.stage === 'probe' ? text.preparing : text.finishing}
+              {showPercent && displayPercent !== null
+                ? `${displayPercent}%`
+                : job.stage === 'probe'
+                  ? text.preparing
+                  : text.finishing}
             </span>
             {job.speed !== null && showPercent && (
               <span className="progress-speed">
@@ -122,10 +188,12 @@ export function ProcessCard(props: ProcessCardProps) {
               </span>
             )}
           </div>
-          <ProgressBar percent={showPercent ? job.percent : job.stage === 'probe' ? null : 100} />
+          <ProgressBar percent={barPercent} />
           <div className="progress-times">
             <span>{text.elapsed(formatDuration(elapsed))}</span>
-            {showPercent && remaining !== null && <span>{text.remaining(formatDuration(remaining))}</span>}
+            {showPercent && remaining !== null && (
+              <span>{batch ? text.batchRemaining(formatDuration(remaining)) : text.remaining(formatDuration(remaining))}</span>
+            )}
           </div>
         </div>
       </>
@@ -158,6 +226,25 @@ export function ProcessCard(props: ProcessCardProps) {
         </div>
       </>
     )
+  } else if (job.phase === 'batchDone') {
+    const { succeeded, failed } = countOutcomes(job.outcomes)
+    const tone = failed === 0 ? 'success' : succeeded === 0 ? 'error' : 'warn'
+    const title = failed === 0 ? text.batchDoneTitle : succeeded === 0 ? text.batchAllFailedTitle : text.batchPartialTitle
+    const detail =
+      succeeded === 0
+        ? text.batchAllFailedDetail(job.outcomes.length)
+        : text.batchDoneDetail(succeeded, failed, formatElapsed(job.seconds, t.units))
+    body = (
+      <>
+        <StatusHeader
+          tone={tone}
+          icon={failed === 0 ? <CircleCheckBig size={20} /> : failed === job.outcomes.length ? <CircleX size={20} /> : <TriangleAlert size={20} />}
+          title={title}
+          detail={detail}
+        />
+        <BatchResults outcomes={job.outcomes} platform={props.platform} onShowInFolder={props.onShowInFolder} />
+      </>
+    )
   } else if (job.phase === 'failed') {
     body = (
       <>
@@ -166,9 +253,25 @@ export function ProcessCard(props: ProcessCardProps) {
       </>
     )
   } else if (job.phase === 'cancelled') {
-    body = (
-      <StatusHeader tone="muted" icon={<Ban size={20} />} title={text.cancelled} detail={text.cancelledDetail} />
-    )
+    const outcomes = job.outcomes
+    if (outcomes && outcomes.length > 1) {
+      const { succeeded, failed, remaining } = countOutcomes(outcomes)
+      body = (
+        <>
+          <StatusHeader
+            tone="muted"
+            icon={<Ban size={20} />}
+            title={text.cancelled}
+            detail={text.batchCancelledDetail(succeeded, failed, remaining)}
+          />
+          <BatchResults outcomes={outcomes} platform={props.platform} onShowInFolder={props.onShowInFolder} />
+        </>
+      )
+    } else {
+      body = (
+        <StatusHeader tone="muted" icon={<Ban size={20} />} title={text.cancelled} detail={text.cancelledDetail} />
+      )
+    }
   } else if (!hasInput) {
     body = (
       <StatusHeader tone="muted" icon={<Clapperboard size={20} />} title={text.waiting} detail={text.waitingDetail} />
@@ -179,15 +282,26 @@ export function ProcessCard(props: ProcessCardProps) {
     const copyOnly = isCopyOnly(features)
     const codec = extname(outputPath) === '.webm' ? 'VP9' : 'H.264'
     const muted = features.removeAudio
-    const detail = copyOnly ? (muted ? text.copyMuted : text.copyOnly) : muted ? text.reencodeMuted(codec) : text.reencode(codec)
+    const detail = copyOnly
+      ? muted
+        ? text.copyMuted
+        : text.copyOnly
+      : muted
+        ? text.reencodeMuted(codec)
+        : text.reencode(codec)
     body = (
       <>
         <StatusHeader
           tone="ready"
           icon={<Sparkles size={20} />}
           title={text.ready}
-          detail={detail}
+          detail={batch ? text.batchReady(inputs.length) : detail}
         />
+        {batch && (
+          <div className="status-detail batch-destination">
+            {text.batchOutput(outputDir ?? t.file.outputDirDefault)}
+          </div>
+        )}
         <div className="chips">
           {selectedChips(features, t).map((chip) => (
             <span key={chip} className="chip is-accent">
@@ -216,7 +330,11 @@ export function ProcessCard(props: ProcessCardProps) {
             disabled={busy || problem !== null}
             title={problem ?? undefined}
           >
-            {busy ? text.starting : job.phase === 'done' || job.phase === 'failed' ? text.restart : text.start}
+            {busy
+              ? text.starting
+              : job.phase === 'done' || job.phase === 'batchDone' || job.phase === 'failed'
+                ? text.restart
+                : text.start}
           </Button>
         )}
         <Button size="lg" icon={<Trash size={15} />} onClick={props.onClear} disabled={busy} title={text.clearHint}>

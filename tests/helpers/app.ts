@@ -43,11 +43,30 @@ export async function launch(userData: string, env: NodeJS.ProcessEnv = process.
   return { app, page }
 }
 
+/** 让“打开”对话框直接返回一个或多个文件；选择文件夹时返回 directory */
+export async function answerOpenDialogs(
+  app: ElectronApplication,
+  { files = [], directory = null }: { files?: string[]; directory?: string | null },
+): Promise<void> {
+  await app.evaluate(
+    ({ dialog }, answer) => {
+      dialog.showOpenDialog = (async (...args: unknown[]) => {
+        const options = args.at(-1) as { properties?: string[] } | undefined
+        if (options?.properties?.includes('openDirectory')) {
+          return answer.directory ? { canceled: false, filePaths: [answer.directory] } : { canceled: true, filePaths: [] }
+        }
+        return answer.files.length > 0
+          ? { canceled: false, filePaths: answer.files }
+          : { canceled: true, filePaths: [] }
+      }) as typeof dialog.showOpenDialog
+    },
+    { files, directory },
+  )
+}
+
 /** 让“打开”对话框直接返回 file */
 export async function answerOpenDialog(app: ElectronApplication, file: string): Promise<void> {
-  await app.evaluate(({ dialog }, chosen) => {
-    dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [chosen] })
-  }, file)
+  await answerOpenDialogs(app, { files: [file] })
 }
 
 /** 让“另存为”对话框直接返回 file */
@@ -75,6 +94,25 @@ export async function shownMessageBoxes(app: ElectronApplication): Promise<strin
 
 export async function logText(page: Page): Promise<string[]> {
   return page.locator('.log-message').allTextContents()
+}
+
+/** 页面上所有文字（包括隐藏的说明弹层）、aria-label 和 title 中含汉字的部分；语言切换按钮上的“中”“中文”除外 */
+export function hanTexts(page: Page): Promise<string[]> {
+  return page.evaluate<string[]>(`(() => {
+    const han = /\\p{Script=Han}/u
+    const skip = (element) => element.closest('[lang="zh-CN"]')
+    const found = []
+    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT)
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      if (han.test(node.textContent) && !skip(node.parentElement)) found.push(node.textContent)
+    }
+    for (const element of document.querySelectorAll('[aria-label], [title]')) {
+      for (const value of [element.getAttribute('aria-label'), element.getAttribute('title')]) {
+        if (value && han.test(value) && !skip(element)) found.push(value)
+      }
+    }
+    return found
+  })()`)
 }
 
 /** 更换视频、更改输出位置这两个按钮在各种界面语言中的名称 */

@@ -8,6 +8,7 @@ import {
   answerMessageBoxes,
   answerOpenDialog,
   assertBuilt,
+  hanTexts,
   launch as launchApp,
   logText,
   makeWorkDir,
@@ -196,24 +197,6 @@ describe('外观', () => {
 })
 
 describe('语言', () => {
-  /** 页面上所有文字（包括隐藏的说明弹层）、aria-label 和 title 中含汉字的部分；语言切换按钮上的“中”“中文”除外 */
-  const hanTexts = (page: Page) =>
-    page.evaluate<string[]>(`(() => {
-      const han = /\\p{Script=Han}/u
-      const skip = (element) => element.closest('[lang="zh-CN"]')
-      const found = []
-      const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT)
-      for (let node = walker.nextNode(); node; node = walker.nextNode()) {
-        if (han.test(node.textContent) && !skip(node.parentElement)) found.push(node.textContent)
-      }
-      for (const element of document.querySelectorAll('[aria-label], [title]')) {
-        for (const value of [element.getAttribute('aria-label'), element.getAttribute('title')]) {
-          if (value && han.test(value) && !skip(element)) found.push(value)
-        }
-      }
-      return found
-    })()`)
-
   it('系统语言是英文时显示英文界面：处理日志、系统对话框也是英文，页面上没有中文', async () => {
     const userData = mkdtempSync(path.join(WORK, 'userdata-en-'))
     const ui = await launch(userData, 'en-US')
@@ -223,7 +206,7 @@ describe('语言', () => {
       expect(await page.evaluate<string>('document.documentElement.lang')).toBe('en')
       expect(await page.getByRole('radio', { name: 'English', exact: true }).getAttribute('aria-checked')).toBe('true')
       expect(await page.locator('.feature.is-on .feature-label').allTextContents()).toEqual(['Time jump', 'Change MD5'])
-      expect(await page.locator('.status-title').textContent()).toBe('Waiting for a video')
+      expect(await page.locator('.status-title').textContent()).toBe('Waiting for videos')
       expect((await logText(page))[0]).toMatch(/^FFmpeg .+ \((bundled with the app|installed on the system|set by VIDEO_DEDUP_FFMPEG)\)$/)
 
       const output = path.join(OUT, 'english.mp4')

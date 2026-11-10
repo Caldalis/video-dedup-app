@@ -49,19 +49,30 @@ export const en: Messages = {
   },
 
   file: {
-    title: 'Video file',
+    title: 'Video files',
     change: 'Change video',
-    dropTitle: 'Drop a video file here, or click to choose one',
-    dropHint: 'Supports MP4, MOV, MKV, AVI, WMV, FLV, WebM and more',
+    add: 'Add files…',
+    dropTitle: 'Drop video files here, or click to choose them',
+    dropHint: 'Supports MP4, MOV, MKV, AVI, WMV, FLV, WebM and more; you can choose several at once',
     loading: 'Reading video info…',
     remove: 'Remove file',
     noAudio: 'No audio',
     originalMd5: 'Original MD5',
     outputTo: 'Output to',
+    outputDirDefault: 'The folder of each video (with _dedup added to the file name)',
+    resetOutputDir: 'Original folders',
     changeOutput: 'Change…',
     md5Computing: 'Calculating…',
     md5Failed: 'Failed',
     copyMd5: 'Copy MD5',
+    statuses: {
+      pending: 'Queued',
+      running: 'Processing',
+      ok: 'Done',
+      failed: 'Failed',
+      cancelled: 'Cancelled',
+      skipped: 'Not processed',
+    },
   },
 
   inputErrors: {
@@ -147,6 +158,8 @@ export const en: Messages = {
   problems: {
     noInput: 'No video file selected yet',
     loading: 'Reading video info…',
+    noOutput: 'No output location set yet',
+    invalidFiles: (count) => `${count} file${count === 1 ? '' : 's'} can't be processed. Remove ${count === 1 ? 'it' : 'them'} to continue.`,
     noFeatures: 'No features are turned on',
     opacity: 'The Invert mask opacity must be a number greater than 0 and at most 1, for example 0.03',
     interval: 'The Drop frames interval must be a whole number of at least 2, for example 5',
@@ -175,10 +188,26 @@ export const en: Messages = {
     failedDetail: 'See the processing log below for details',
     cancelled: 'Cancelled',
     cancelledDetail: 'No output file was created, and any existing file with the same name was left untouched',
-    waiting: 'Waiting for a video',
-    waitingDetail: 'Choose or drop a video file to start processing',
+    waiting: 'Waiting for videos',
+    waitingDetail: 'Choose or drop one or more video files to start processing',
     notReady: "Can't start yet",
     ready: 'Ready',
+    batchReady: (count) => `${count} videos will be processed one by one`,
+    batchOutput: (dir) => `Output to: ${dir}`,
+    batchRunning: (index, total) => `Processing video ${index} of ${total}`,
+    batchDoneTitle: 'Batch processing complete',
+    batchPartialTitle: 'Batch processing partly complete',
+    batchAllFailedTitle: 'Batch processing failed',
+    batchDoneDetail: (succeeded, failed, time) =>
+      failed > 0 ? `${succeeded} succeeded, ${failed} failed, in ${time}` : `All ${succeeded} videos processed in ${time}`,
+    batchAllFailedDetail: (total) => `All ${total} videos failed; see the processing log for details`,
+    batchCancelledDetail: (succeeded, failed, remaining) => {
+      if (succeeded === 0 && failed === 0) return 'No output files were created'
+      return failed > 0
+        ? `${succeeded} finished, ${failed} failed, and the other ${remaining} were not completed; finished files were kept`
+        : `${succeeded} finished, and the other ${remaining} were not completed; finished files were kept`
+    },
+    batchRemaining: (time) => `About ${time} left for this video`,
     copyOnly: "Change MD5 only: the streams are copied without re-encoding, so it's fast",
     copyMuted: "The video stream is copied without re-encoding, so it's fast; the output has no audio",
     reencode: (codec) => `The video is re-encoded as ${codec}; the audio is copied whenever possible`,
@@ -204,12 +233,25 @@ export const en: Messages = {
     md5Done: (slot, value) => `${slot === 'input' ? 'Original file' : 'Output file'} MD5: ${value}`,
     md5Failed: (slot, message) => `Couldn't calculate the MD5 of the ${slot === 'input' ? 'original file' : 'output file'}: ${message}`,
     opened: (path) => `Opened video: ${path}`,
+    openedMany: (count) => `Opened ${count} videos`,
     outputChanged: (path) => `Output location changed to: ${path}`,
+    outputDirChanged: (path) => `Output folder changed to: ${path}`,
     cleared: 'Cleared; options restored to defaults',
     starting: 'Starting processing',
     cannotStart: (message) => `Can't start: ${message}`,
     finished: (time) => `Done in ${time}`,
     failed: (message) => `Processing failed: ${message}`,
+    batchFileFailed: (name, message) => `Couldn't process ${name}: ${message}`,
+    batchDone: (succeeded, failed, time) =>
+      failed > 0
+        ? `Batch processing complete: ${succeeded} succeeded, ${failed} failed, in ${time}`
+        : `Batch processing complete: ${succeeded} videos in ${time}`,
+    batchCancelled: (succeeded, failed, remaining) => {
+      if (succeeded === 0 && failed === 0) return 'Processing cancelled; no output file was created'
+      return failed > 0
+        ? `Cancelled: ${succeeded} finished, ${failed} failed, and the other ${remaining} were not completed`
+        : `Cancelled: ${succeeded} finished, and the other ${remaining} were not completed`
+    },
     cancelled: 'Processing cancelled; no output file was created',
     cancelling: 'Cancelling…',
     copied: 'Copied to clipboard',
@@ -236,14 +278,19 @@ export const en: Messages = {
     videoFiles: 'Video Files',
     allFiles: 'All Files',
     saveTitle: 'Choose Output Location',
+    outputDirTitle: 'Choose Output Folder',
     extensionFiles: (ext) => `.${ext} Files`,
     cancelJob: {
       message: 'Cancel the current processing?',
       detail: 'Everything processed so far will be discarded, and no output file will be created.',
+      batchDetail: 'The current file will be discarded, files already finished will be kept, and the remaining files will not be processed.',
       confirm: 'Cancel Processing',
       keep: 'Keep Processing',
     },
     overwrite: { message: 'The output file already exists. Overwrite it?', confirm: 'Overwrite', cancel: 'Cancel' },
+    overwriteBatch: {
+      message: (count) => `${count} output files already exist. Overwrite all of them?`,
+    },
     quit: { message: 'A video is being processed, and quitting will cancel it. Quit anyway?', confirm: 'Quit', keep: 'Keep Processing' },
   },
 
@@ -252,9 +299,11 @@ export const en: Messages = {
     invalidPath: 'Invalid file path',
     busy: 'Another video is being processed. Please wait until it finishes.',
     noInput: 'No video file selected yet',
+    duplicateInputs: 'The list contains the same video more than once. Please remove the duplicates.',
     inputMissing: (path) => `Input file not found:\n${path}`,
     noOutput: 'No output location set yet',
     sameFile: "The output file can't be the same as the input file. Please choose a different output path.",
+    outputMatchesInput: (path) => `The output file can't be the same as a video being processed. Please choose a different output location:\n${path}`,
     outputDirMissing: (dir) => `The output folder doesn't exist:\n${dir}`,
   },
 
@@ -286,6 +335,7 @@ export const en: Messages = {
   },
 
   processor: {
+    fileHeading: (index, total, name) => `Video ${index} of ${total}: ${name}`,
     input: (path) => `Input: ${path}`,
     output: (path) => `Output: ${path}`,
     cannotReadInput: (reason) => `Can't read the input file: ${reason}`,

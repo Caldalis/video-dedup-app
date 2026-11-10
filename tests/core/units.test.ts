@@ -5,6 +5,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { fileKey, planBatchOutputs } from '../../src/core/batch'
 import { FFMPEG_ENV_VAR, isVersionSupported, locateFFmpeg, parseEncoders } from '../../src/core/ffmpeg'
 import { defaultOutputPath, isSameFile, md5File } from '../../src/core/files'
 import { buildVideoFilters } from '../../src/core/filters'
@@ -12,11 +13,13 @@ import { parseMediaInfo, timeToSeconds } from '../../src/core/probe'
 import { formatCommand, LineSplitter, randomString } from '../../src/core/util'
 import { messages } from '../../src/shared/i18n'
 import { detectLanguage } from '../../src/shared/i18n/language'
+import { countOutcomes, type FileOutcome } from '../../src/shared/types'
 import {
   DEFAULT_FEATURES,
   isCopyOnly,
   parseInterval,
   parseOpacity,
+  readStartOptions,
   validateFeatures,
   type FeatureOptions,
 } from '../../src/shared/options'
@@ -99,6 +102,111 @@ describe('参数校验', () => {
   it('问题的说明按界面语言显示', () => {
     expect(messages('zh-CN').problems.opacity).toBe('蒙版倒置的不透明度需要是大于 0、不超过 1 的数字，例如 0.03')
     expect(messages('en').problems.interval).toBe('The Drop frames interval must be a whole number of at least 2, for example 5')
+  })
+})
+
+describe('批量处理参数', () => {
+  it('读取界面发来的请求：过滤无效的输入，保留每个功能选项', () => {
+    const options = readStartOptions({
+      inputs: ['/videos/a.mp4', '', 42, '/videos/b.mkv'],
+      outputPath: '/videos/out.mp4',
+      outputDir: '',
+      mirror: true,
+      rgbShift: true,
+      maskInvert: true,
+      maskOpacity: 0.5,
+      frameSampling: true,
+      samplingInterval: 7,
+      samplingRandom: false,
+      removeAudio: true,
+    })
+    expect(options).toEqual({
+      inputs: ['/videos/a.mp4', '/videos/b.mkv'],
+      outputPath: '/videos/out.mp4',
+      outputDir: null,
+      mirror: true,
+      rgbShift: true,
+      timeJump: false,
+      md5Change: false,
+      maskInvert: true,
+      maskOpacity: 0.5,
+      frameSampling: true,
+      samplingInterval: 7,
+      samplingRandom: false,
+      removeAudio: true,
+    })
+  })
+
+  it('类型不对或缺少时按默认值处理；兼容旧版只传 inputPath 的请求', () => {
+    const empty = readStartOptions(null)
+    expect(empty.inputs).toEqual([])
+    expect(empty.outputPath).toBeNull()
+    expect(empty.outputDir).toBeNull()
+    expect(empty.maskOpacity).toBe(DEFAULT_FEATURES.maskOpacity)
+    expect(empty.samplingInterval).toBe(DEFAULT_FEATURES.samplingInterval)
+
+    expect(readStartOptions({ inputPath: '/videos/a.mp4', outputPath: '/videos/a_out.mp4' })).toMatchObject({
+      inputs: ['/videos/a.mp4'],
+      outputPath: '/videos/a_out.mp4',
+    })
+    expect(readStartOptions({ inputs: 'a.mp4' }).inputs).toEqual([])
+    expect(readStartOptions({ inputs: [1, null, 'ok.mp4'] }).inputs).toEqual(['ok.mp4'])
+  })
+
+  it('规划输出路径：默认输出到原目录，文件名末尾加 _dedup', () => {
+    const dir = path.join(tmp, 'videos')
+    expect(planBatchOutputs([path.join(dir, 'a.mp4'), path.join(dir, 'b.mkv')], null)).toEqual([
+      { inputPath: path.join(dir, 'a.mp4'), outputPath: path.join(dir, 'a_dedup.mp4') },
+      { inputPath: path.join(dir, 'b.mkv'), outputPath: path.join(dir, 'b_dedup.mkv') },
+    ])
+  })
+
+  it('规划输出路径：输出到指定文件夹时，同名文件依次加 _2、_3', () => {
+    const dirA = path.join(tmp, 'a')
+    const dirB = path.join(tmp, 'b')
+    const out = path.join(tmp, 'out')
+    expect(planBatchOutputs([path.join(dirA, 'clip.mp4'), path.join(dirB, 'clip.mp4')], out)).toEqual([
+      { inputPath: path.join(dirA, 'clip.mp4'), outputPath: path.join(out, 'clip_dedup.mp4') },
+      { inputPath: path.join(dirB, 'clip.mp4'), outputPath: path.join(out, 'clip_dedup_2.mp4') },
+    ])
+  })
+
+  it('规划输出路径：不会覆盖列表中还没处理的输入文件', () => {
+    const dir = path.join(tmp, 'collide')
+    expect(planBatchOutputs([path.join(dir, 'a.mp4'), path.join(dir, 'a_dedup.mp4')], null)).toEqual([
+      { inputPath: path.join(dir, 'a.mp4'), outputPath: path.join(dir, 'a_dedup_2.mp4') },
+      { inputPath: path.join(dir, 'a_dedup.mp4'), outputPath: path.join(dir, 'a_dedup_dedup.mp4') },
+    ])
+  })
+
+  it('规划输出路径：通过符号链接目录指向的输入文件不会被另一个输出覆盖', () => {
+    const real = path.join(tmp, 'real-symlink')
+    mkdirSync(real, { recursive: true })
+    writeFileSync(path.join(real, 'a.mp4'), 'a')
+    writeFileSync(path.join(real, 'a_dedup.mp4'), 'b')
+    const link = path.join(tmp, 'link-symlink')
+    symlinkSync(real, link, process.platform === 'win32' ? 'junction' : 'dir')
+
+    // link/a.mp4 和 real/a_dedup.mp4 是两个输入；link/a_dedup.mp4 实际指向第二个输入
+    const items = planBatchOutputs([path.join(link, 'a.mp4'), path.join(real, 'a_dedup.mp4')], null)
+
+    expect(items[0].outputPath).toBe(path.join(link, 'a_dedup_2.mp4'))
+    expect(items[1].outputPath).toBe(path.join(real, 'a_dedup_dedup.mp4'))
+    // 同一个文件通过符号链接访问时得到相同的键，用于识别重复输入
+    expect(fileKey(path.join(link, 'a.mp4'))).toBe(fileKey(path.join(real, 'a.mp4')))
+  })
+})
+
+describe('批量结果汇总', () => {
+  it('分别统计成功、失败和未完成（取消、跳过），取消前失败的文件不会被算作未处理', () => {
+    const outcomes: FileOutcome[] = [
+      { index: 0, inputPath: '/a.mp4', outputPath: '/a_dedup.mp4', status: 'ok' },
+      { index: 1, inputPath: '/b.mp4', outputPath: '/b_dedup.mp4', status: 'failed', message: 'error' },
+      { index: 2, inputPath: '/c.mp4', outputPath: '/c_dedup.mp4', status: 'cancelled' },
+      { index: 3, inputPath: '/d.mp4', outputPath: '/d_dedup.mp4', status: 'skipped' },
+    ]
+    expect(countOutcomes(outcomes)).toEqual({ succeeded: 1, failed: 1, remaining: 2 })
+    expect(countOutcomes([])).toEqual({ succeeded: 0, failed: 0, remaining: 0 })
   })
 })
 

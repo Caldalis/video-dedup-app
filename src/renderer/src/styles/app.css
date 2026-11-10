@@ -936,6 +936,61 @@ code,
   font-size: 12px;
 }
 
+/* 批量处理：文件列表和每个文件的处理状态 */
+.file-list {
+  max-height: min(360px, 40vh);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.batch-file {
+  padding: 10px 12px;
+}
+
+.file-status {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: var(--surface-3);
+  color: var(--text-2);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.file-status.is-running {
+  background: var(--accent-soft-2);
+  color: var(--accent-text);
+}
+
+.file-status.is-ok {
+  background: var(--success-soft);
+  color: var(--success);
+}
+
+.file-status.is-failed {
+  background: var(--danger-soft-2);
+  color: var(--danger);
+}
+
+.file-status.is-cancelled,
+.file-status.is-skipped {
+  color: var(--text-3);
+}
+
+.batch-destination {
+  margin-top: -4px;
+  color: var(--text-3);
+  font-size: 12.5px;
+  overflow-wrap: anywhere;
+}
+
 /* ==========================================================================
    去重功能
    ========================================================================== */
@@ -1188,6 +1243,94 @@ code,
   flex-wrap: wrap;
   gap: 8px;
   margin-top: 2px;
+}
+
+/* 批量处理结果：每个文件一行，失败的文件显示原因 */
+.batch-results {
+  max-height: 220px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  overflow-y: auto;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface-2);
+}
+
+.batch-result {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  min-height: 28px;
+  padding: 2px 0;
+}
+
+.batch-result-dot {
+  width: 8px;
+  height: 8px;
+  flex: none;
+  margin-top: 7px;
+  border-radius: 50%;
+  background: var(--text-3);
+}
+
+.batch-result-dot.is-ok {
+  background: var(--success);
+}
+
+.batch-result-dot.is-failed {
+  background: var(--danger);
+}
+
+.batch-result-dot.is-cancelled,
+.batch-result-dot.is-skipped {
+  background: var(--border-strong);
+}
+
+.batch-result-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.batch-result-name {
+  overflow: hidden;
+  font-size: 12.5px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.batch-result-message {
+  max-height: 60px;
+  margin-top: 1px;
+  overflow-y: auto;
+  color: var(--danger);
+  font-size: 11.5px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.batch-result-status {
+  flex: none;
+  margin-top: 1px;
+  color: var(--text-3);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.batch-result-status.is-ok {
+  color: var(--success);
+}
+
+.batch-result-status.is-failed {
+  color: var(--danger);
+}
+
+.batch-result .icon-btn {
+  width: 24px;
+  height: 24px;
+  margin-top: -2px;
 }
 
 .error-box {
